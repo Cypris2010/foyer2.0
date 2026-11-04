@@ -24,6 +24,8 @@ import { securityHeaders } from './headers.ts';
 import { displayState } from './status.ts';
 import { LeaseTable } from './leases.ts';
 import { registerScheduleRoutes } from './schedule-routes.ts';
+import { registerMediaRoutes } from './media-routes.ts';
+import { backgroundSchema, checkBackground, mediaFields } from './background.ts';
 
 type Env = AuthEnv;
 
@@ -41,6 +43,7 @@ const displayPatch = z.object({
   name: z.string().min(1).max(200).optional(),
   defaultChannelId: z.string().nullable().optional(),
   showProgress: z.boolean().optional(),
+  soundAllowed: z.boolean().optional(),
   orientation: z.enum(['landscape', 'portrait']).optional(),
   networks: cidrList.optional(),
 });
@@ -56,7 +59,7 @@ const slideBody = z.object({
   title: z.string().min(1).max(300),
   type: z.string().min(1).max(100),
   config: z.unknown(),
-  background: z.unknown().nullable().default(null),
+  background: backgroundSchema,
   duration: z.number().int().min(1).max(86400).nullable().default(null),
   published: z.boolean().default(true),
 });
@@ -115,6 +118,8 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
   // Last slide each display reported; in memory only, it is live state.
   const nowPlaying = new Map<string, { slideId: string | null; version: string | null; at: number }>();
   const leases = new LeaseTable();
+  // Finished transcodes change what slides show: players fetch the manifest again.
+  ctx.media.onReady = () => events.broadcast('manifest-changed');
 
   const sseStream = (c: Context, key: string) =>
     streamSSE(c, async (stream) => {
@@ -181,6 +186,7 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
         description: definition.description ?? '',
         category: definition.category ?? 'content',
         backgrounds: definition.backgrounds ?? false,
+        durationFromMedia: definition.durationFromMedia ?? null,
         editRole: definition.editRole ?? 'editor',
         schema: jsonSchema,
       })),
@@ -197,7 +203,7 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
 
   // Displays
   admin.get('/displays', (c) => {
-    const rows = db.prepare('SELECT id, name, default_channel_id, show_progress, orientation, networks, last_seen_at, status_json FROM displays ORDER BY name').all() as any[];
+    const rows = db.prepare('SELECT id, name, default_channel_id, show_progress, sound_allowed, orientation, networks, last_seen_at, status_json FROM displays ORDER BY name').all() as any[];
     const titleOf = db.prepare('SELECT title FROM slides WHERE id = ?');
     return c.json(
       rows.map((r) => {
@@ -215,6 +221,7 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
           name: r.name,
           defaultChannelId: r.default_channel_id,
           showProgress: r.show_progress === 1,
+          soundAllowed: r.sound_allowed === 1,
           orientation: r.orientation,
           networks: r.networks,
           lastSeenAt: r.last_seen_at,
@@ -231,7 +238,7 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
   // the slide the real player reported last (null while the display is offline).
   admin.get('/preview/displays/:id/manifest', async (c) => {
     const display = db
-      .prepare('SELECT id, name, default_channel_id, show_progress, orientation, networks, last_seen_at FROM displays WHERE id = ?')
+      .prepare('SELECT id, name, default_channel_id, show_progress, sound_allowed, orientation, networks, last_seen_at FROM displays WHERE id = ?')
       .get(c.req.param('id')) as (DisplayRow & { last_seen_at: number | null }) | undefined;
     if (!display) return c.json({ error: 'Nicht gefunden' }, 404);
     const manifest = await buildManifest(ctx, display, { preview: true });
@@ -289,6 +296,7 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
     if (body.data.name !== undefined) set('name', body.data.name);
     if (body.data.defaultChannelId !== undefined) set('default_channel_id', body.data.defaultChannelId);
     if (body.data.showProgress !== undefined) set('show_progress', body.data.showProgress ? 1 : 0);
+    if (body.data.soundAllowed !== undefined) set('sound_allowed', body.data.soundAllowed ? 1 : 0);
     if (body.data.orientation !== undefined) set('orientation', body.data.orientation);
     if (body.data.networks !== undefined) set('networks', body.data.networks);
     if (!fields.length) return c.json({ ok: true });
@@ -456,11 +464,20 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
     const d = body.data;
     if (!registry.has(d.type)) return c.json({ error: `Unbekannter Folientyp: ${d.type}` }, 400);
     if (!mayEditType(c, d.type)) return c.json({ error: 'Dieser Folientyp erfordert Admin-Rechte' }, 403);
+    const backgroundError = checkBackground(ctx, d.background, registry.get(d.type)!.definition.backgrounds);
+    if (backgroundError) return c.json({ error: backgroundError }, 400);
     let config: unknown;
     try {
       config = parseConfig(registry, d.type, d.config);
     } catch (err) {
       return badRequest(c, err);
+    }
+    for (const field of mediaFields(registry.get(d.type)!.jsonSchema)) {
+      const mediaId = (config as Record<string, unknown>)[field.name];
+      if (typeof mediaId !== 'string' || !mediaId) continue;
+      const item = ctx.media.get(mediaId);
+      if (!item) return c.json({ error: 'Die gewählte Datei gibt es nicht mehr' }, 400);
+      if (item.kind !== field.accept) return c.json({ error: field.accept === 'video' ? 'Bitte ein Video wählen' : 'Bitte ein Bild wählen' }, 400);
     }
     const now = ctx.now();
     if (slideId) {
@@ -497,6 +514,7 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
   });
 
   registerScheduleRoutes(admin, ctx, editor);
+  registerMediaRoutes(admin, ctx, editor);
 
   // Preview manifest for one slide (admin preview player at /p/preview/<slideId>).
   admin.get('/preview/slides/:id/manifest', async (c) => {
@@ -506,11 +524,12 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
     return c.json({
       version: `preview-${row.updated_at}`,
       generatedAt: new Date(ctx.now()).toISOString(),
-      display: { id: 'preview', name: 'Vorschau', showProgress: false, orientation: 'landscape' },
+      display: { id: 'preview', name: 'Vorschau', showProgress: false, orientation: 'landscape', soundAllowed: false },
       channel: { id: 'preview', name: 'Vorschau', transition: 'none' },
       slides: slide ? [slide] : [],
       nextChange: null,
       settings: { locale: ctx.locale, timeZone: ctx.timeZone },
+      playerBuild: ctx.playerBuild(),
     });
   });
 
@@ -548,7 +567,7 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
     const ip = c.get('clientIp');
     if (!ipAllowed(ip, ctx.playerNetworks)) return c.json({ error: 'Nicht erlaubt' }, 403);
     const display = db
-      .prepare('SELECT id, name, default_channel_id, show_progress, orientation, networks FROM displays WHERE token_hash = ?')
+      .prepare('SELECT id, name, default_channel_id, show_progress, sound_allowed, orientation, networks FROM displays WHERE token_hash = ?')
       .get(sha256(c.req.param('token'))) as DisplayRow | undefined;
     // Same response for unknown token and foreign network: nothing to enumerate.
     if (!display) return c.json({ error: 'Nicht erlaubt' }, 403);
@@ -601,6 +620,16 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
   app.route('/api/player', player);
   // Mounted after the player routes: the admin middleware matches all of /api/*.
   app.route('/api', admin);
+
+  // --- Media files --------------------------------------------------------------
+  // Players (school networks) and logged-in admins only: uploads may show people.
+  // Names are content hashes, so responses are cached for good.
+  app.get('/media/:file', async (c) => {
+    if (!ipAllowed(c.get('clientIp'), ctx.playerNetworks) && !sessionUser(db, getCookie(c, SESSION_COOKIE))) {
+      return c.text('Nicht erlaubt', 403);
+    }
+    return (await ctx.media.serve(c.req.param('file'), c.req.header('range'))) ?? c.notFound();
+  });
 
   // --- Sandboxed slide documents (HTML slides) --------------------------------
 

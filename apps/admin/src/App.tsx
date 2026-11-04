@@ -4,8 +4,9 @@ import { Displays } from './Displays.tsx';
 import { Channels } from './Channels.tsx';
 import { Slides } from './Slides.tsx';
 import { CalendarPage } from './CalendarPage.tsx';
+import { MediaPage } from './Media.tsx';
 
-const pages = { displays: 'Displays', calendar: 'Kalender', channels: 'Channels', slides: 'Folien' } as const;
+const pages = { displays: 'Displays', calendar: 'Kalender', channels: 'Channels', slides: 'Folien', media: 'Medien' } as const;
 type Page = keyof typeof pages;
 
 function currentPage(): Page {
@@ -89,6 +90,7 @@ export function App() {
         {page === 'calendar' && <CalendarPage user={user} onError={onError} />}
         {page === 'channels' && <Channels user={user} onError={onError} />}
         {page === 'slides' && <Slides user={user} onError={onError} />}
+        {page === 'media' && <MediaPage user={user} onError={onError} />}
       </main>
     </div>
   );

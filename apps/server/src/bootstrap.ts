@@ -5,6 +5,9 @@ import { EventHub } from './events.ts';
 import { config } from './config.ts';
 import type { AppContext } from './context.ts';
 import { loadTokenKey } from './keys.ts';
+import { join } from 'node:path';
+import { MediaLibrary } from './media.ts';
+import { playerBuildReader } from './player-build.ts';
 
 export function contentSecret(db: Db): string {
   let secret = getSetting(db, 'content_secret');
@@ -16,10 +19,19 @@ export function contentSecret(db: Db): string {
 }
 
 export async function createContext(db: Db = openDb(config.dataDir)): Promise<AppContext> {
+  const media = new MediaLibrary(db, {
+    dir: join(config.dataDir, 'media'),
+    ffmpeg: config.ffmpeg,
+    ffprobe: config.ffprobe,
+    maxBytes: config.mediaMaxMb * 1048576,
+  });
+  media.resume();
   return {
     db,
     registry: await loadRegistry(config.slideTypesDir),
     events: new EventHub(),
+    media,
+    playerBuild: playerBuildReader(config.playerDist),
     secret: contentSecret(db),
     tokenKey: loadTokenKey(config.dataDir),
     locale: config.locale,

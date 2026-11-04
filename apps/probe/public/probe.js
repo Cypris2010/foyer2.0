@@ -273,7 +273,7 @@
     if (!window.indexedDB) return next();
     var finished = false;
     function finish() { if (!finished) { finished = true; next(); } }
-    setTimeout(function () { s.indexedDBError = s.indexedDBError || 'timeout'; finish(); }, 3000);
+    setTimeout(function () { if (!finished) { s.indexedDBError = s.indexedDBError || 'timeout'; finish(); } }, 3000);
     try {
       var request = indexedDB.open('foyer-probe', 1);
       request.onupgradeneeded = function () { request.result.createObjectStore('marker'); };

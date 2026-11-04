@@ -1,4 +1,6 @@
 import { join } from 'node:path';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { randomBytes } from 'node:crypto';
 import { createApp } from '../apps/server/src/app.ts';
 import { openDbAt } from '../apps/server/src/db.ts';
@@ -9,6 +11,7 @@ import { resetLoginThrottle } from '../apps/server/src/auth.ts';
 import { clearDataCache } from '../apps/server/src/manifest.ts';
 import { utcToLocal } from '../apps/server/src/schedule-engine.ts';
 import type { AppContext } from '../apps/server/src/context.ts';
+import { MediaLibrary } from '../apps/server/src/media.ts';
 
 const slideTypesDir = join(import.meta.dirname, '../slide-types');
 export const PASSWORD = 'correct-horse-battery';
@@ -22,6 +25,8 @@ export async function setup(now = Date.parse('2026-11-04T10:00:00Z')) {
     db,
     registry: await loadRegistry(slideTypesDir),
     events: new EventHub(),
+    media: new MediaLibrary(db, { dir: mkdtempSync(join(tmpdir(), 'foyer-media-')), ffmpeg: 'ffmpeg', ffprobe: 'ffprobe', maxBytes: 50 * 1048576 }),
+    playerBuild: () => null,
     secret: 'test-secret',
     tokenKey: randomBytes(32),
     locale: 'de-DE',

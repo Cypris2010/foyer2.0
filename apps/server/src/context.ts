@@ -1,11 +1,15 @@
 import type { Db } from './db.ts';
 import type { Registry } from './registry.ts';
 import type { EventHub } from './events.ts';
+import type { MediaLibrary } from './media.ts';
 
 export interface AppContext {
   db: Db;
   registry: Registry;
   events: EventHub;
+  media: MediaLibrary;
+  /** File name of the player bundle being served (player-build.ts); null when not built. */
+  playerBuild: () => string | null;
   /** HMAC secret for signed content URLs, generated on first start. */
   secret: string;
   /** AES key for stored display tokens (see keys.ts). */

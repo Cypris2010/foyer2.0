@@ -31,6 +31,10 @@ export const config = {
   secureCookies: process.env.FOYER_INSECURE_COOKIES !== '1',
   locale: process.env.FOYER_LOCALE ?? 'de-DE',
   timeZone: process.env.FOYER_TIMEZONE ?? 'Europe/Berlin',
+  // Media pipeline (KONZEPT 6.2): ffmpeg/ffprobe on the server, upload limit in MB.
+  ffmpeg: process.env.FOYER_FFMPEG ?? 'ffmpeg',
+  ffprobe: process.env.FOYER_FFPROBE ?? 'ffprobe',
+  mediaMaxMb: Number(process.env.FOYER_MEDIA_MAX_MB ?? 2048),
   sessionIdleHours: 8,
   sessionMaxDays: 7,
 };

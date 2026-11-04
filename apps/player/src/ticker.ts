@@ -3,19 +3,23 @@
 import type { PlayerContext, SlideInstance } from '@foyer/slide-sdk';
 import { renderers } from './registry.ts';
 import type { Manifest, ManifestSlide } from './types.ts';
+import { mountBackground, type BackgroundControl } from './background.ts';
 
 const TRANSITION_MS = 1500;
+// Slides that end with their media get this much extra before the timer takes over.
+const END_GRACE_S = 3;
 
 interface Mounted {
   key: string;
   slide: ManifestSlide;
   el: HTMLElement;
   instance: SlideInstance;
+  background: BackgroundControl;
 }
 
 // Cheap content signature: a slide is re-mounted only when its content changed.
 function signature(slide: ManifestSlide): string {
-  const text = JSON.stringify([slide.type, slide.config, slide.data, slide.documentUrl, slide.background]);
+  const text = JSON.stringify([slide.type, slide.config, slide.data, slide.documentUrl, slide.background, slide.media, slide.playsToEnd]);
   let hash = 5381;
   for (let i = 0; i < text.length; i++) hash = ((hash << 5) + hash + text.charCodeAt(i)) | 0;
   return `${slide.id}:${hash}`;
@@ -137,6 +141,7 @@ export class Ticker {
 
     entering.el.classList.remove('is-next', 'is-leaving');
     entering.el.classList.add('is-active');
+    entering.background.start();
     entering.instance.start?.();
     this.current = entering;
     this.hooks.onSlideChange(slide);
@@ -147,8 +152,12 @@ export class Ticker {
       setTimeout(() => {
         leaving.el.classList.remove('is-leaving');
         leaving.instance.stop?.();
+        leaving.background.stop();
         // With two slides the one that just left is also the next one: prepare it again.
-        if (leaving.el.classList.contains('is-next')) leaving.instance.prepare?.();
+        if (leaving.el.classList.contains('is-next')) {
+          leaving.background.prepare();
+          leaving.instance.prepare?.();
+        }
         this.cleanup();
       }, TRANSITION_MS);
     }
@@ -158,13 +167,15 @@ export class Ticker {
       const prepared = this.mount(next);
       if (prepared) {
         prepared.el.classList.add('is-next');
+        prepared.background.prepare();
         prepared.instance.prepare?.();
       }
     }
 
     if (!this.following) {
       this.startProgress(slide.duration);
-      this.timer = setTimeout(this.advance, slide.duration * 1000);
+      // Media slides end themselves via done(); the timer only catches a stalled video.
+      this.timer = setTimeout(this.advance, (slide.duration + (slide.playsToEnd ? END_GRACE_S : 0)) * 1000);
     }
     return true;
   }
@@ -178,24 +189,27 @@ export class Ticker {
 
     const el = document.createElement('div');
     el.className = `foyer-slide foyer-slide--${slide.type}`;
-    if (slide.background?.kind === 'color') el.style.background = slide.background.value;
     this.stage.appendChild(el);
+    const background = mountBackground(el, slide.background, (message) => this.hooks.onError(`${slide.title}: ${message}`));
 
     const ctx: PlayerContext = {
       locale: this.manifest.settings.locale,
       timeZone: this.manifest.settings.timeZone,
       displayName: this.manifest.display.name,
+      soundAllowed: this.manifest.display.soundAllowed === true,
       done: () => {
         if (this.current?.key === key) this.advance();
       },
       reportError: (error) => this.hooks.onError(`${slide.title}: ${String((error as Error)?.message ?? error)}`),
     };
     try {
-      const instance = renderer(el, { config: slide.config, data: slide.data, ctx, documentUrl: slide.documentUrl }) || {};
-      const mounted = { key, slide, el, instance };
+      const instance =
+        renderer(el, { config: slide.config, data: slide.data, ctx, documentUrl: slide.documentUrl, media: slide.media ?? {}, playsToEnd: slide.playsToEnd === true }) || {};
+      const mounted = { key, slide, el, instance, background };
       this.mounted.set(key, mounted);
       return mounted;
     } catch (err) {
+      background.destroy();
       el.remove();
       this.hooks.onError(`${slide.title}: ${String((err as Error)?.message ?? err)}`);
       return null;
@@ -216,6 +230,7 @@ export class Ticker {
       } catch (err) {
         this.hooks.onError(String(err));
       }
+      mounted.background.destroy();
       mounted.el.remove();
       this.mounted.delete(key);
     }
@@ -225,6 +240,7 @@ export class Ticker {
     clearTimeout(this.timer);
     this.current?.el.classList.remove('is-active');
     this.current?.instance.stop?.();
+    this.current?.background.stop();
     this.current = null;
     this.index = -1;
     this.cleanup();

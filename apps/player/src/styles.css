@@ -74,3 +74,12 @@ html, body {
   font-size: 3vmin;
 }
 .foyer-badge[hidden] { display: none; }
+
+/* Slide backgrounds (background.ts): below the slide content. The slide is
+   isolated so z-index -1 stays inside it, whatever the renderer positions. */
+.foyer-slide.has-bg { isolation: isolate; }
+.foyer-bg { position: absolute; top: 0; right: 0; bottom: 0; left: 0; z-index: -1; overflow: hidden; background: #000; }
+.foyer-bg__media { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: block; }
+.foyer-bg__media--cover { object-fit: cover; }
+.foyer-bg__media--contain { object-fit: contain; }
+.foyer-bg__dim { position: absolute; top: 0; right: 0; bottom: 0; left: 0; background: #000; }

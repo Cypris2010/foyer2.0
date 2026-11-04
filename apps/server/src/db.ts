@@ -131,6 +131,32 @@ const migrations: Array<string | ((db: DatabaseSync) => void)> = [
       insert.run(crypto.randomUUID(), row.channel_id, row.slide_id, start, end, now, now);
     }
   },
+  // Media library (KONZEPT 6.2). Files live in <dataDir>/media, see media.ts;
+  // sha256 is the uploaded original's and deduplicates uploads.
+  `
+  CREATE TABLE media (
+    id TEXT PRIMARY KEY,
+    sha256 TEXT NOT NULL UNIQUE,
+    kind TEXT NOT NULL CHECK (kind IN ('image', 'video')),
+    name TEXT NOT NULL,
+    original_ext TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    width INTEGER,
+    height INTEGER,
+    duration_s REAL,
+    variants_json TEXT NOT NULL DEFAULT '{}',
+    poster TEXT,
+    thumb TEXT,
+    status TEXT NOT NULL CHECK (status IN ('queued', 'processing', 'ready', 'failed')),
+    error TEXT,
+    uploaded_by TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+  CREATE INDEX media_created ON media (created_at);
+  `,
+  // Sound only on displays that allow it, e.g. the hall, not the corridors (KONZEPT 6.2).
+  `ALTER TABLE displays ADD COLUMN sound_allowed INTEGER NOT NULL DEFAULT 0;`,
 ];
 
 export type Db = DatabaseSync;
