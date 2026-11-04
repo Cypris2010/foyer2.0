@@ -1,0 +1,64 @@
+/* Rem scale as in wp-foyer: 16px at 1080p, proportional on other screens. */
+html {
+  font-size: 1.4815vmin; /* 16 / 1080 * 100vmin */
+}
+html, body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #000;
+  color: #fff;
+  cursor: none;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+* { box-sizing: border-box; }
+
+.foyer-stage {
+  position: fixed;
+  top: 0; right: 0; bottom: 0; left: 0;
+  overflow: hidden;
+}
+
+.foyer-slide {
+  position: absolute;
+  top: 0; right: 0; bottom: 0; left: 0;
+  overflow: hidden;
+  visibility: hidden;
+  background: #0f172a;
+}
+.foyer-slide.is-active { visibility: visible; z-index: 2; }
+.foyer-slide.is-leaving { visibility: visible; z-index: 1; }
+
+/* Transitions animate only opacity/transform (GPU compositing, KONZEPT 2.2). */
+.foyer-stage[data-transition="fade"] .foyer-slide { opacity: 0; transition: opacity 1.5s ease, visibility 0s linear 1.5s; }
+.foyer-stage[data-transition="fade"] .foyer-slide.is-active { opacity: 1; transition: opacity 1.5s ease, visibility 0s; }
+.foyer-stage[data-transition="fade"] .foyer-slide.is-leaving { opacity: 0; transition: opacity 1.5s ease, visibility 0s; }
+
+.foyer-stage[data-transition="slide"] .foyer-slide { transform: translateX(100%); }
+.foyer-stage[data-transition="slide"] .foyer-slide.is-active { transform: none; transition: transform 1.5s ease; }
+.foyer-stage[data-transition="slide"] .foyer-slide.is-leaving { transform: translateX(-100%); transition: transform 1.5s ease; }
+
+.foyer-progress {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  height: 0.6vmin;
+  z-index: 5;
+  background: rgba(255, 255, 255, 0.6);
+  transform: scaleX(0);
+  transform-origin: left;
+}
+
+.foyer-overlay {
+  position: fixed;
+  top: 0; right: 0; bottom: 0; left: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5vmin;
+  background: rgba(15, 23, 42, 0.92);
+  font-size: 6vmin;
+  text-align: center;
+}
+.foyer-overlay[hidden] { display: none; }

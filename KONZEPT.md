@@ -187,13 +187,13 @@ Die WebUntis-Folien verarbeiten **personenbezogene Daten**: Namen bzw. Kürzel v
 
 | Schicht | Wahl | Warum |
 |---|---|---|
-| Server | Node 22 + **Hono** (oder Fastify) | schlank, typisiert, SSE eingebaut |
-| DB | **SQLite** via Drizzle ORM (Postgres optional) | eine Datei, Backup = Datei kopieren; reicht für hunderte Displays |
+| Server | Node ≥ 24 (TypeScript direkt, ohne Build) + **Hono** | schlank, typisiert, SSE eingebaut |
+| DB | **SQLite** über `node:sqlite` (Bordmittel, keine native Abhängigkeit) | eine Datei, Backup = Datei kopieren; reicht für hunderte Displays |
 | Jobs | einfache DB-Queue im Prozess (oder BullMQ bei Bedarf) | Transkodierung, PDF-Rendering, Feed-Refresh |
-| Admin | React + Vite + TanStack Query, Formulare aus Zod-Schema generiert | |
+| Admin | React + Vite, Formulare aus dem JSON-Schema der Folientypen generiert | umgesetzt (Grundgerüst) |
 | Kalender | EventCalendar (vkurko, MIT) weiterverwenden | ist heute schon im Einsatz |
 | Recurrence | **`rrule`** (bzw. `rrule-temporal`) statt eigener Engine | RFC 5545 komplett, behebt den COUNT-Bug |
-| Player | Vanilla TS oder Preact, eigenes kleines Bundle, Service Worker | läuft auf schwachen Geräten (Pi, Fire TV, Smart TV) |
+| Player | Vanilla TS (ES2017), eigenes kleines Bundle; Service Worker nach Probe-Ergebnis | läuft auf schwachen Geräten (Pi, Fire TV, Smart TV) |
 | Medien | ffmpeg/ffprobe, `pdftoppm` (poppler) statt Imagick | |
 | Deployment | ein Docker-Image (Server + Admin + Player) | |
 
@@ -210,9 +210,9 @@ Ein Folientyp ist **ein Ordner** unter `slide-types/`. Er wird automatisch gefun
 ```
 slide-types/
   text/
-    index.ts        # Manifest + Schema (Pflicht)
-    Render.tsx      # Player-Darstellung (Pflicht)
-    server.ts       # optional: Daten holen, Optionen liefern, expandieren
+    index.ts        # Definition + Zod-Schema (Pflicht)
+    render.ts       # Player-Darstellung, reines DOM ohne Framework (Pflicht)
+    server.ts       # optional: Daten holen, Optionen liefern, Sandbox-Dokument
     style.css       # optional
     i18n.json       # optional
   webuntis-room/
@@ -222,30 +222,33 @@ slide-types/
 
 ### 5.2 Vertrag (Typdefinition)
 
+Umgesetzt in `packages/slide-sdk/src/index.ts`. Der Renderer ist bewusst **reines DOM** statt JSX: Der Player bleibt winzig (aktuell ~4 KB gzip), und die WebUntis-Module lassen sich 1:1 als `mount`/`unmount` einhängen.
+
 ```ts
-// packages/slide-sdk/src/index.ts
-export interface SlideType<C extends z.ZodTypeAny, D = unknown> {
-  id: string;                         // 'webuntis-room'
-  name: string;                       // 'Raumanzeige (WebUntis)'
-  icon?: string;
+export interface SlideTypeDefinition<S extends z.ZodType> {
+  id: string;                           // = Ordnername
+  name: string;
   category?: 'content' | 'media' | 'data' | 'school';
-  config: C;                          // Zod-Schema → Admin-Formular + Validierung + Typen
-  backgrounds?: BackgroundKind[] | false; // erlaubte Hintergründe; false = keiner
-  defaultDuration?: number;           // Sekunden; 'media' = aus Medium ableiten
+  config: S;                            // Zod-Schema → Admin-Formular + Validierung + Typen
+  backgrounds?: BackgroundKind[] | false;
+  defaultDuration?: number;
+  keepAlive?: boolean;                  // im DOM halten (WebUntis, 5.6)
+  editRole?: 'admin' | 'editor';        // HTML-Folien: nur Admins
 }
 
 export interface SlideServer<C, D> {
-  // Daten serverseitig holen und cachen; Player bekommt nur das Ergebnis
-  fetch?(config: C, ctx: FetchCtx): Promise<D>;
-  refresh?: number | ((config: C) => number);   // Sekunden, Push an Player bei Änderung
-  // Auswahllisten fürs Formular (z. B. Räume, Lehrkräfte aus der Untis-Datei)
-  options?: Record<string, (config: Partial<C>, ctx: Ctx) => Promise<Option[]>>;
-  // Stack: aus einer Slide werden n Slides (PDF-Seiten, RSS-Einträge, Termine)
-  expand?(config: C, data: D): Array<{ key: string; props: unknown; duration?: number }>;
+  data?(config: C, ctx: ServerContext): Promise<D> | D;  // serverseitig berechnen/holen, gecacht
+  refreshSeconds?: number | ((config: C) => number);
+  options?: Record<string, (config: Partial<C>, ctx) => Promise<Option[]>>;  // Auswahllisten
+  document?(config: C, ctx): { html: string; csp: string };  // Sandbox-Dokument (HTML-Folie)
 }
 
-export type SlideRender<C, D> = (p: { config: C; data: D; ctx: PlayerCtx }) => JSX.Element;
+// Player: bekommt einen Container, liefert den Lebenszyklus zurück
+export type SlideRenderer<C, D> = (root: HTMLElement, props: { config: C; data: D; ctx: PlayerContext; documentUrl?: string })
+  => { prepare?(); start?(); stop?(); update?(data); destroy?() } | void;
 ```
+
+Stack-Folien (eine Folie → n Folien, z. B. PDF-Seiten, RSS-Einträge) kommen als `expand`-Hook in Phase 4 dazu.
 
 ### 5.3 Beispiel: so klein wird ein neuer Typ
 
@@ -262,8 +265,16 @@ export default defineSlideType({
   backgrounds: ['image', 'video', 'color'],
 });
 
-// slide-types/countdown/Render.tsx
-export default ({ config }) => <Countdown {...config} />;
+// slide-types/countdown/render.ts
+export default defineRenderer((root, { config }) => {
+  const node = document.createElement('div');
+  root.appendChild(node);
+  let timer: number;
+  return {
+    start: () => { timer = setInterval(() => (node.textContent = remaining(config.target)), 1000); },
+    stop: () => clearInterval(timer),
+  };
+});
 ```
 
 Das Admin-Formular entsteht aus dem Schema: `.describe()` liefert das Label. Spezial-Widgets kommen über Metadaten dazu, z. B. `z.string().meta({ widget: 'media', accept: 'image/*' })`, `widget: 'richtext'`, `widget: 'select', options: 'rooms'` (ruft `server.options.rooms` auf).

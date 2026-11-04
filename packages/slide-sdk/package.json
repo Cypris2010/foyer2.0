@@ -1,0 +1,12 @@
+{
+  "name": "@foyer/slide-sdk",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./runtime": "./src/runtime.ts"
+  },
+  "peerDependencies": {
+    "zod": "^4.1.0"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["apps/server/src", "apps/probe/server.ts", "packages/slide-sdk/src", "slide-types", "tests"]
+}

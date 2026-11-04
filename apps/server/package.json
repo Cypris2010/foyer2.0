@@ -1,0 +1,20 @@
+{
+  "name": "@foyer/server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/index.ts",
+    "start": "node src/index.ts",
+    "cli": "node src/cli.ts"
+  },
+  "dependencies": {
+    "@foyer/slide-sdk": "*",
+    "@foyer/slide-types": "*",
+    "@hono/node-server": "^1.19.6",
+    "hono": "^4.10.4",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0"
+  }
+}

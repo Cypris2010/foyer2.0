@@ -1,0 +1,16 @@
+{
+  "name": "@foyer/player",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build --watch"
+  },
+  "dependencies": {
+    "@foyer/slide-sdk": "*",
+    "@foyer/slide-types": "*"
+  },
+  "devDependencies": {
+    "vite": "^7.1.12"
+  }
+}

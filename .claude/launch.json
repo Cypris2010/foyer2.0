@@ -4,8 +4,20 @@
     {
       "name": "probe",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["apps/probe/server.ts"],
+      "runtimeArgs": [
+        "apps/probe/server.ts"
+      ],
       "port": 8090
+    },
+    {
+      "name": "foyer",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "FOYER_PORT=8088",
+        "node",
+        "apps/server/src/index.ts"
+      ],
+      "port": 8088
     }
   ]
 }

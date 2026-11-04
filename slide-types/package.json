@@ -1,0 +1,13 @@
+{
+  "name": "@foyer/slide-types",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@foyer/slide-sdk": "*",
+    "qrcode": "^1.5.4",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/qrcode": "^1.5.5"
+  }
+}
