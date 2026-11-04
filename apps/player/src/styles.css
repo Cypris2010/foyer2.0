@@ -62,3 +62,15 @@ html, body {
   text-align: center;
 }
 .foyer-overlay[hidden] { display: none; }
+
+/* Live preview in the admin: marks that the display is offline. */
+.foyer-badge {
+  position: fixed;
+  top: 2vmin; left: 2vmin;
+  z-index: 11;
+  padding: 0.8vmin 1.6vmin;
+  border-radius: 1vmin;
+  background: rgba(185, 28, 28, 0.9);
+  font-size: 3vmin;
+}
+.foyer-badge[hidden] { display: none; }

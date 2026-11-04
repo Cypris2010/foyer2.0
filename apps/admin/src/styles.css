@@ -83,6 +83,18 @@ main { padding: 1.25rem; max-width: 1400px; margin: 0 auto; }
 
 .row--end { justify-content: flex-end; margin-top: 0; }
 
+/* Display cards: preview on top, same height in a row, settings folded away */
+.cards:has(.display-card) { align-items: start; }
+.display-card { grid-template-rows: auto auto auto 1fr; }
+.display-card__meta { margin: 0; min-height: 2.9em; }
+.display-card__actions { margin: 0; align-self: end; }
+.display-card .thumb--portrait { width: auto; height: 180px; margin: 0 auto; }
+.display-card .thumb--landscape { height: 180px; width: 100%; }
+.saved { color: var(--ok); font-size: 0.85rem; }
+.settings { border-top: 1px solid var(--border); padding-top: 0.5rem; }
+.settings summary { cursor: pointer; color: var(--muted); }
+.settings[open] summary { margin-bottom: 0.75rem; }
+
 /* Slide overview with live thumbnails */
 .slide-cards { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.75rem; }
 .overview .slide-cards { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem; }

@@ -22,6 +22,7 @@ import { parseConfig } from './registry.ts';
 import { hashPassword } from './crypto.ts';
 import { securityHeaders } from './headers.ts';
 import { displayState } from './status.ts';
+import { LeaseTable } from './leases.ts';
 
 type Env = AuthEnv;
 
@@ -70,6 +71,10 @@ const userCreate = z.object({
   role: z.enum(['admin', 'editor', 'viewer']),
   password: z.string().min(12).max(1000),
 });
+const nowPlayingBody = z.object({
+  slideId: z.string().max(64).nullable(),
+  version: z.string().max(64).nullable(),
+});
 const heartbeatBody = z.object({
   version: z.string().max(64).nullable(),
   slideId: z.string().max(64).nullable(),
@@ -86,7 +91,7 @@ function badRequest(c: Context, error: unknown) {
 // --- Logging: never write display tokens to logs (KONZEPT 3.3) ---------------
 
 export function maskPath(path: string): string {
-  return path.replace(/^\/p\/(?!preview\/)[^/]+/, '/p/***').replace(/^\/api\/player\/[^/]+/, '/api/player/***');
+  return path.replace(/^\/p\/(?!preview(-display)?\/)[^/]+/, '/p/***').replace(/^\/api\/player\/[^/]+/, '/api/player/***');
 }
 
 function requestLogger(): MiddlewareHandler {
@@ -112,6 +117,23 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
   const { db, registry, events } = ctx;
   const app = new Hono<Env>();
   const remote = options.remoteAddress ?? (() => '127.0.0.1');
+  // Last slide each display reported; in memory only, it is live state.
+  const nowPlaying = new Map<string, { slideId: string | null; version: string | null; at: number }>();
+  const leases = new LeaseTable();
+
+  const sseStream = (c: Context, key: string) =>
+    streamSSE(c, async (stream) => {
+      const unsubscribe = events.subscribe(key, (event, data) => {
+        void stream.writeSSE({ event, data: JSON.stringify(data ?? {}) });
+      });
+      stream.onAbort(unsubscribe);
+      await stream.writeSSE({ event: 'hello', data: '{}' });
+      while (!stream.aborted) {
+        await stream.sleep(25_000);
+        if (!stream.aborted) await stream.writeSSE({ event: 'ping', data: '{}' });
+      }
+      unsubscribe();
+    });
 
   app.use('*', requestLogger());
   app.use('*', async (c, next) => {
@@ -181,25 +203,53 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
   // Displays
   admin.get('/displays', (c) => {
     const rows = db.prepare('SELECT id, name, default_channel_id, show_progress, orientation, networks, last_seen_at, status_json FROM displays ORDER BY name').all() as any[];
+    const titleOf = db.prepare('SELECT title FROM slides WHERE id = ?');
     return c.json(
-      rows.map((r) => ({
-        id: r.id,
-        name: r.name,
-        defaultChannelId: r.default_channel_id,
-        showProgress: r.show_progress === 1,
-        orientation: r.orientation,
-        networks: r.networks,
-        lastSeenAt: r.last_seen_at,
-        status: r.status_json ? JSON.parse(r.status_json) : null,
-        state: displayState({
+      rows.map((r) => {
+        const status = r.status_json ? JSON.parse(r.status_json) : null;
+        const state = displayState({
           connected: events.connected(r.id) > 0,
           lastSeenAt: r.last_seen_at,
           now: ctx.now(),
           serverStartedAt: ctx.startedAt,
-        }),
-      })),
+        });
+        const current = state === 'online' && status?.slideId ? (titleOf.get(status.slideId) as { title: string } | undefined) : undefined;
+        const holder = leases.holder(r.id, ctx.now());
+        return {
+          id: r.id,
+          name: r.name,
+          defaultChannelId: r.default_channel_id,
+          showProgress: r.show_progress === 1,
+          orientation: r.orientation,
+          networks: r.networks,
+          lastSeenAt: r.last_seen_at,
+          status,
+          state,
+          currentSlideTitle: current?.title ?? null,
+          device: holder ? { ip: holder.ip, since: holder.since } : null,
+        };
+      }),
     );
   });
+
+  // What a display shows, for the live preview in the admin: the manifest plus
+  // the slide the real player reported last (null while the display is offline).
+  admin.get('/preview/displays/:id/manifest', async (c) => {
+    const display = db
+      .prepare('SELECT id, name, default_channel_id, show_progress, orientation, networks, last_seen_at FROM displays WHERE id = ?')
+      .get(c.req.param('id')) as (DisplayRow & { last_seen_at: number | null }) | undefined;
+    if (!display) return c.json({ error: 'Nicht gefunden' }, 404);
+    const manifest = await buildManifest(ctx, display, { preview: true });
+    const online =
+      displayState({ connected: events.connected(display.id) > 0, lastSeenAt: display.last_seen_at, now: ctx.now(), serverStartedAt: ctx.startedAt }) === 'online';
+    return c.json({
+      ...manifest,
+      display: { ...manifest.display, showProgress: false },
+      nowPlaying: online ? (nowPlaying.get(display.id) ?? null) : null,
+    });
+  });
+
+  admin.get('/preview/displays/:id/events', (c) => sseStream(c, `watch:${c.req.param('id')}`));
 
   admin.post('/displays', adminOnly, async (c) => {
     const body = displayCreate.safeParse(await c.req.json().catch(() => null));
@@ -265,6 +315,14 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
     // Connected players with the old token reload and are rejected from then on.
     events.send(c.req.param('id'), 'reload');
     return c.json({ token, playerPath: `/p/${token}` });
+  });
+
+  // Frees the display for another device; the current one shows a notice and steps back.
+  admin.post('/displays/:id/release', adminOnly, (c) => {
+    const released = leases.release(c.req.param('id'));
+    events.send(c.req.param('id'), 'released');
+    audit(db, c.get('user').id, 'release-device', 'display', c.req.param('id'), { ip: released?.ip ?? null });
+    return c.json({ ok: true });
   });
 
   admin.post('/displays/:id/reload', editor, (c) => {
@@ -497,6 +555,14 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
     if (!display) return c.json({ error: 'Nicht erlaubt' }, 403);
     const own = display.networks.split(',').map((n) => n.trim()).filter(Boolean);
     if (own.length && !ipAllowed(ip, own)) return c.json({ error: 'Nicht erlaubt' }, 403);
+    // One device per display. Players send a random per-page-load session id;
+    // clients without one (curl, old bundles) count as one session per IP.
+    const sessionId = (c.req.header('x-foyer-session') ?? c.req.query('session') ?? `ip:${ip}`).slice(0, 64);
+    const lease = leases.acquire(display.id, sessionId, ip, ctx.now());
+    if (!lease.ok) {
+      return c.json({ error: 'Dieses Display ist bereits auf einem anderen Gerät geöffnet.', code: 'display-busy' }, 409);
+    }
+    if (lease.tookOver) audit(db, null, 'device-takeover', 'display', display.id, { from: lease.tookOver.ip, to: ip });
     c.set('display', display);
     c.header('Cache-Control', 'no-store');
     await next();
@@ -515,21 +581,22 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
     return c.json({ ok: true });
   });
 
+  // Sent by the player on every slide change; drives the live preview in the admin.
+  player.post('/:token/now-playing', async (c) => {
+    const body = nowPlayingBody.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return badRequest(c, body.error);
+    const display = c.get('display');
+    const entry = { ...body.data, at: ctx.now() };
+    nowPlaying.set(display.id, entry);
+    db.prepare('UPDATE displays SET last_seen_at = ? WHERE id = ?').run(entry.at, display.id);
+    events.send(`watch:${display.id}`, 'now-playing', entry);
+    return c.json({ ok: true });
+  });
+
   player.get('/:token/events', (c) => {
     const display = c.get('display');
     db.prepare('UPDATE displays SET last_seen_at = ? WHERE id = ?').run(ctx.now(), display.id);
-    return streamSSE(c, async (stream) => {
-      const unsubscribe = events.subscribe(display.id, (event, data) => {
-        void stream.writeSSE({ event, data: JSON.stringify(data ?? {}) });
-      });
-      stream.onAbort(unsubscribe);
-      await stream.writeSSE({ event: 'hello', data: '{}' });
-      while (!stream.aborted) {
-        await stream.sleep(25_000);
-        if (!stream.aborted) await stream.writeSSE({ event: 'ping', data: '{}' });
-      }
-      unsubscribe();
-    });
+    return sseStream(c, display.id);
   });
 
   app.route('/api/player', player);
@@ -544,12 +611,15 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
     const displayId = c.req.query('d') ?? '';
     const signature = c.req.query('s') ?? '';
     if (!safeEqual(signature, documentSignature(ctx, slideId, version, displayId))) return c.text('Nicht erlaubt', 403);
-    if (displayId !== 'preview' && !ipAllowed(c.get('clientIp'), ctx.playerNetworks)) return c.text('Nicht erlaubt', 403);
+    // "preview" (single slide) and "preview:<displayId>" (display preview) are admin previews.
+    const isPreview = displayId === 'preview' || displayId.startsWith('preview:');
+    if (!isPreview && !ipAllowed(c.get('clientIp'), ctx.playerNetworks)) return c.text('Nicht erlaubt', 403);
     const row = db.prepare('SELECT type, config_json, updated_at FROM slides WHERE id = ?').get(slideId) as any;
     if (!row || row.updated_at !== version) return c.text('Nicht gefunden', 404);
     const entry = registry.get(row.type);
     if (!entry?.server.document) return c.text('Nicht gefunden', 404);
-    const display = displayId === 'preview' ? { name: 'Vorschau' } : (db.prepare('SELECT name FROM displays WHERE id = ?').get(displayId) as { name: string } | undefined);
+    const realDisplayId = displayId.startsWith('preview:') ? displayId.slice('preview:'.length) : displayId;
+    const display = displayId === 'preview' ? { name: 'Vorschau' } : (db.prepare('SELECT name FROM displays WHERE id = ?').get(realDisplayId) as { name: string } | undefined);
     const doc = entry.server.document(entry.definition.config.parse(JSON.parse(row.config_json)), {
       displayId,
       displayName: display?.name ?? '',

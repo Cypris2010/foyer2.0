@@ -17,6 +17,9 @@ export interface Display {
   lastSeenAt: number | null;
   status: { version: string | null; slideId: string | null; errors: string[]; screen?: string; ip?: string } | null;
   state: 'online' | 'offline' | 'never' | 'checking';
+  currentSlideTitle: string | null;
+  /** The one device currently holding this display. */
+  device: { ip: string; since: number } | null;
 }
 
 export interface Channel {

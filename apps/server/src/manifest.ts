@@ -83,7 +83,13 @@ export function documentUrl(ctx: AppContext, slideId: string, version: number, d
   return `/content/slides/${encodeURIComponent(slideId)}/${version}?d=${encodeURIComponent(displayId)}&s=${sig}`;
 }
 
-export async function buildSlideEntry(ctx: AppContext, slide: SlideRow, channelDefault: number, displayId: string): Promise<ManifestSlide | null> {
+export async function buildSlideEntry(
+  ctx: AppContext,
+  slide: SlideRow,
+  channelDefault: number,
+  displayId: string,
+  documentDisplayId = displayId,
+): Promise<ManifestSlide | null> {
   const entry = ctx.registry.get(slide.type);
   if (!entry) return null;
   const parsed = entry.definition.config.safeParse(JSON.parse(slide.config_json));
@@ -106,11 +112,16 @@ export async function buildSlideEntry(ctx: AppContext, slide: SlideRow, channelD
   } catch (err) {
     result.error = `Daten nicht verfügbar: ${(err as Error).message}`;
   }
-  if (entry.server.document) result.documentUrl = documentUrl(ctx, slide.id, slide.updated_at, displayId);
+  if (entry.server.document) result.documentUrl = documentUrl(ctx, slide.id, slide.updated_at, documentDisplayId);
   return result;
 }
 
-export async function buildManifest(ctx: AppContext, display: DisplayRow): Promise<Manifest> {
+/**
+ * `preview` signs sandbox documents as "preview:<displayId>", so admins can
+ * view them from outside the player networks (they hold no personal data).
+ */
+export async function buildManifest(ctx: AppContext, display: DisplayRow, opts: { preview?: boolean } = {}): Promise<Manifest> {
+  const documentDisplayId = opts.preview ? `preview:${display.id}` : display.id;
   const now = ctx.now();
   // Phase 3 adds schedules here; until then the default channel is active.
   const channel = display.default_channel_id
@@ -140,7 +151,7 @@ export async function buildManifest(ctx: AppContext, display: DisplayRow): Promi
       consider(row.window_end);
       if (row.window_start !== null && row.window_start > now) continue;
       if (row.window_end !== null && row.window_end <= now) continue;
-      const entry = await buildSlideEntry(ctx, row, channel.default_duration, display.id);
+      const entry = await buildSlideEntry(ctx, row, channel.default_duration, display.id, documentDisplayId);
       if (entry) slides.push(entry);
     }
   }

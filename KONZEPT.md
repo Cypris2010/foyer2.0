@@ -452,6 +452,8 @@ Für den Start reicht „Ordner ins Repo, neu bauen“. Wenn Typen *ohne Rebuild
 2. `GET /api/player/manifest` → `{ version, display, channel, slides:[{id,type,config,data,duration,background,assets}], nextChange }`. Den aktiven Channel und die Slide-Fenster löst der Server auf. `nextChange` sagt dem Player, wann sich laut Zeitplan etwas ändert; er braucht also kein Polling dafür.
 3. **SSE-Stream** `/api/player/events`: `manifest-changed`, `data-changed:<slideId>` (für RSS/Untis), `reload`, `identify` (Display blinkt kurz) und optional `screenshot`.
 4. **Heartbeat** alle 30 s: aktuelle Slide, Version, Cache-Status, Fehler, Auflösung.
+   - Zusätzlich meldet der Player **jeden Folienwechsel sofort** (`now-playing`). Die Live-Vorschau im Admin (`/p/preview-display/<id>`) folgt dieser Meldung per SSE und zeigt so dieselbe Folie wie das echte Display. Ist das Display nicht verbunden, spielt sie den Plan und kennzeichnet das sichtbar.
+   - **Ein Gerät pro Display:** Jede Player-Seite schickt eine zufällige Sitzungs-ID. Die erste Sitzung hält das Display; andere Geräte bekommen `409` und eine Meldung. Dieselbe IP darf sofort übernehmen (Neuladen nach Bildschirmfreigabe), andere erst nach 90 s Stille. Admins können ein Gerät freigeben; es pausiert dann 2 min. Übernahmen landen im Audit-Log.
 5. Der Ticker wechselt nur an Slide-Grenzen auf ein neues Manifest, ohne harten Schnitt. Das entspricht der heutigen Logik mit `foyer_ticker_shutdown`.
 
 ---

@@ -20,4 +20,6 @@ export interface Manifest {
   slides: ManifestSlide[];
   nextChange: string | null;
   settings: { locale: string; timeZone: string };
+  /** Display previews only: the slide the real player reported last; null = offline. */
+  nowPlaying?: { slideId: string | null; version: string | null; at: number } | null;
 }

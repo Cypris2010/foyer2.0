@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, can, type Slide, type SlideType, type User } from './api.ts';
 import { defaultsFor, SchemaForm } from './SchemaForm.tsx';
-import { SlideThumb } from './SlideThumb.tsx';
+import { PlayerThumb } from './PlayerThumb.tsx';
 
 interface Draft {
   id: string | null;
@@ -77,7 +77,7 @@ export function Slides({ user, onError }: { user: User; onError: (e: unknown) =>
           {slides.map((slide) => (
             <li key={slide.id}>
               <button className={draft?.id === slide.id ? 'slide-card active' : 'slide-card'} onClick={() => setDraft({ ...slide })}>
-                <SlideThumb slideId={slide.id} version={slide.updatedAt} />
+                <PlayerThumb src={`/p/preview/${slide.id}`} reloadKey={slide.updatedAt} />
                 <span className="slide-card__title">{slide.title}</span>
                 <span className="muted">
                   {typeOf(slide.type)?.name ?? slide.type}

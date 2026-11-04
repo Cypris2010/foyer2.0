@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, can, type Channel, type Display, type User } from './api.ts';
+import { PlayerThumb } from './PlayerThumb.tsx';
 
 function since(ts: number): string {
   const date = new Date(ts);
@@ -36,6 +37,132 @@ function stateLabel(display: Display): string {
   }
 }
 
+interface CardProps {
+  display: Display;
+  channels: Channel[];
+  user: User;
+  onChanged: () => void;
+  onReveal: (name: string, url: string) => void;
+  onError: (e: unknown) => void;
+}
+
+function DisplayCard({ display, channels, user, onChanged, onReveal, onError }: CardProps) {
+  const [saved, setSaved] = useState(false);
+  const channel = channels.find((c) => c.id === display.defaultChannelId);
+  const playerUrl = (path: string) => `${location.origin}${path}`;
+
+  const run = async (action: () => Promise<unknown>, confirmSaved = false) => {
+    try {
+      await action();
+      if (confirmSaved) {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+      }
+      onChanged();
+    } catch (e) {
+      onError(e);
+    }
+  };
+  const patch = (body: Partial<Display>) => run(() => api.patch(`/displays/${display.id}`, body), true);
+
+  const reveal = () =>
+    run(async () => {
+      const res = await api.post<{ playerPath: string }>(`/displays/${display.id}/reveal-url`);
+      onReveal(display.name, playerUrl(res.playerPath));
+    });
+  const rotate = () =>
+    confirm(`Neue URL für „${display.name}“ erzeugen? Die alte URL funktioniert danach nicht mehr.`) &&
+    run(async () => {
+      const res = await api.post<{ playerPath: string }>(`/displays/${display.id}/rotate-token`);
+      onReveal(display.name, playerUrl(res.playerPath));
+    });
+  const release = () =>
+    confirm(`Gerät ${display.device?.ip ?? ''} von „${display.name}“ trennen? Ein anderes Gerät kann das Display dann übernehmen.`) &&
+    run(() => api.post(`/displays/${display.id}/release`));
+  const remove = () => confirm(`Display „${display.name}“ löschen?`) && run(() => api.del(`/displays/${display.id}`));
+
+  return (
+    <article className="card display-card">
+      <PlayerThumb src={`/p/preview-display/${display.id}`} reloadKey={display.defaultChannelId ?? ''} orientation={display.orientation} />
+      <header>
+        <h2>{display.name}</h2>
+        <span className={`badge ${STATE[display.state].className}`} title={STATE[display.state].hint}>
+          {stateLabel(display)}
+        </span>
+      </header>
+      <p className="muted display-card__meta">
+        {channel ? `Channel: ${channel.name}` : 'Kein Channel zugewiesen'}
+        {display.currentSlideTitle ? ` · zeigt gerade: ${display.currentSlideTitle}` : ''}
+      </p>
+      {display.status?.errors?.length ? <p className="error">{display.status.errors.join(' · ')}</p> : null}
+
+      {can(user, 'editor') && (
+        <div className="row display-card__actions">
+          <button onClick={() => run(() => api.post(`/displays/${display.id}/identify`))} title="Zeigt den Namen 10 s groß auf dem Bildschirm">
+            Identifizieren
+          </button>
+          <button onClick={() => run(() => api.post(`/displays/${display.id}/reload`))}>Neu laden</button>
+          {saved && <span className="saved">Gespeichert ✓</span>}
+        </div>
+      )}
+
+      {can(user, 'editor') && (
+        <details className="settings">
+          <summary>Einstellungen</summary>
+          <div className="form">
+            <label className="field">
+              <span>Standard-Channel</span>
+              <select value={display.defaultChannelId ?? ''} onChange={(e) => patch({ defaultChannelId: e.target.value || null })}>
+                <option value="">– keiner –</option>
+                {channels.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span>Ausrichtung</span>
+              <select value={display.orientation} onChange={(e) => patch({ orientation: e.target.value as Display['orientation'] })}>
+                <option value="landscape">Querformat (16:9)</option>
+                <option value="portrait">Hochformat (9:16)</option>
+              </select>
+            </label>
+            <label className="field field--check">
+              <input type="checkbox" checked={display.showProgress} onChange={(e) => patch({ showProgress: e.target.checked })} />
+              Fortschrittsbalken
+            </label>
+            {can(user, 'admin') && (
+              <>
+                <label className="field">
+                  <span>Erlaubte Netze (CIDR, leer = globale Einstellung)</span>
+                  <input
+                    defaultValue={display.networks}
+                    placeholder="z. B. 10.20.0.0/16"
+                    onBlur={(e) => e.target.value !== display.networks && patch({ networks: e.target.value })}
+                  />
+                </label>
+                <p className="muted">
+                  {display.device ? `Gerät ${display.device.ip}, verbunden seit ${since(display.device.since)}` : 'Kein Gerät verbunden'}
+                  {display.status?.screen ? ` · Bildschirm ${display.status.screen}` : ''}
+                </p>
+                <div className="row">
+                  {display.device && (
+                    <button onClick={release} title="Trennt das aktuelle Gerät für 2 Minuten, damit ein anderes das Display übernehmen kann">
+                      Gerät freigeben
+                    </button>
+                  )}
+                  <button onClick={reveal}>URL anzeigen</button>
+                  <button onClick={rotate}>Neue URL</button>
+                  <button className="danger" onClick={remove}>Löschen</button>
+                </div>
+              </>
+            )}
+          </div>
+        </details>
+      )}
+    </article>
+  );
+}
+
 export function Displays({ user, onError }: { user: User; onError: (e: unknown) => void }) {
   const [displays, setDisplays] = useState<Display[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -56,43 +183,17 @@ export function Displays({ user, onError }: { user: User; onError: (e: unknown) 
     return () => clearInterval(timer);
   }, []);
 
-  const playerUrl = (path: string) => `${location.origin}${path}`;
-
   const create = async () => {
     if (!name.trim()) return;
     try {
       const res = await api.post<{ playerPath: string }>('/displays', { name });
-      setRevealed({ name, url: playerUrl(res.playerPath) });
+      setRevealed({ name, url: `${location.origin}${res.playerPath}` });
       setName('');
       await load();
     } catch (e) {
       onError(e);
     }
   };
-
-  const rotate = async (display: Display) => {
-    if (!confirm(`Neue URL für „${display.name}“ erzeugen? Die alte URL funktioniert danach nicht mehr.`)) return;
-    try {
-      const res = await api.post<{ playerPath: string }>(`/displays/${display.id}/rotate-token`);
-      setRevealed({ name: display.name, url: playerUrl(res.playerPath) });
-    } catch (e) {
-      onError(e);
-    }
-  };
-
-  const reveal = async (display: Display) => {
-    try {
-      const res = await api.post<{ playerPath: string }>(`/displays/${display.id}/reveal-url`);
-      setRevealed({ name: display.name, url: playerUrl(res.playerPath) });
-    } catch (e) {
-      onError(e);
-    }
-  };
-
-  const patch = (display: Display, body: Partial<Display>) => api.patch(`/displays/${display.id}`, body).then(load).catch(onError);
-  const action = (display: Display, what: 'reload' | 'identify') => api.post(`/displays/${display.id}/${what}`).catch(onError);
-  const remove = (display: Display) =>
-    confirm(`Display „${display.name}“ löschen?`) && api.del(`/displays/${display.id}`).then(load).catch(onError);
 
   return (
     <section>
@@ -114,52 +215,15 @@ export function Displays({ user, onError }: { user: User; onError: (e: unknown) 
       )}
       <div className="cards">
         {displays.map((display) => (
-          <article key={display.id} className="card">
-            <header>
-              <h2>{display.name}</h2>
-              <span className={`badge ${STATE[display.state].className}`} title={STATE[display.state].hint}>
-                {stateLabel(display)}
-              </span>
-            </header>
-            {display.status?.screen && <p className="muted">Bildschirm {display.status.screen}</p>}
-            {display.status?.errors?.length ? <p className="error">{display.status.errors.join(' · ')}</p> : null}
-            <label className="field">
-              <span>Standard-Channel</span>
-              <select
-                value={display.defaultChannelId ?? ''}
-                disabled={!can(user, 'editor')}
-                onChange={(e) => patch(display, { defaultChannelId: e.target.value || null })}
-              >
-                <option value="">– keiner –</option>
-                {channels.map((channel) => (
-                  <option key={channel.id} value={channel.id}>{channel.name}</option>
-                ))}
-              </select>
-            </label>
-            <label className="field field--check">
-              <input type="checkbox" checked={display.showProgress} disabled={!can(user, 'editor')} onChange={(e) => patch(display, { showProgress: e.target.checked })} />
-              Fortschrittsbalken
-            </label>
-            {can(user, 'admin') && (
-              <label className="field">
-                <span>Erlaubte Netze (CIDR, leer = global)</span>
-                <input
-                  defaultValue={display.networks}
-                  placeholder="z. B. 10.20.0.0/16"
-                  onBlur={(e) => e.target.value !== display.networks && patch(display, { networks: e.target.value })}
-                />
-              </label>
-            )}
-            {can(user, 'editor') && (
-              <div className="row">
-                <button onClick={() => action(display, 'identify')}>Identifizieren</button>
-                <button onClick={() => action(display, 'reload')}>Neu laden</button>
-                {can(user, 'admin') && <button onClick={() => reveal(display)}>URL anzeigen</button>}
-                {can(user, 'admin') && <button onClick={() => rotate(display)}>Neue URL</button>}
-                {can(user, 'admin') && <button className="danger" onClick={() => remove(display)}>Löschen</button>}
-              </div>
-            )}
-          </article>
+          <DisplayCard
+            key={display.id}
+            display={display}
+            channels={channels}
+            user={user}
+            onChanged={load}
+            onReveal={(n, url) => setRevealed({ name: n, url })}
+            onError={onError}
+          />
         ))}
       </div>
     </section>

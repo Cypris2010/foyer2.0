@@ -15,6 +15,7 @@ export const PASSWORD = 'correct-horse-battery';
 export async function setup(now = Date.parse('2026-11-04T10:00:00Z')) {
   resetLoginThrottle();
   clearDataCache();
+  let clock = now;
   const db = openDbAt(':memory:');
   const ctx: AppContext = {
     db,
@@ -27,7 +28,7 @@ export async function setup(now = Date.parse('2026-11-04T10:00:00Z')) {
     playerNetworks: ['10.0.0.0/8', '127.0.0.0/8'],
     trustedProxies: ['127.0.0.1'],
     startedAt: now - 3600_000,
-    now: () => now,
+    now: () => clock,
   };
   // Tests choose the socket address via a header the real server never reads.
   const app = createApp(ctx, { remoteAddress: (c) => c.req.header('x-test-remote') ?? '10.1.2.3' });
@@ -70,7 +71,11 @@ export async function setup(now = Date.parse('2026-11-04T10:00:00Z')) {
     return cookie.split(';')[0];
   }
 
-  return { app, ctx, db, token, now, loginAs };
+  const advance = (ms: number) => {
+    clock += ms;
+  };
+
+  return { app, ctx, db, token, now, loginAs, advance };
 }
 
 export function json(method: string, body: unknown, cookie?: string): RequestInit {

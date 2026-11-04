@@ -34,6 +34,8 @@ export class Ticker {
   private current: Mounted | null = null;
   private mounted = new Map<string, Mounted>();
   private timer: ReturnType<typeof setTimeout> | undefined;
+  /** Live preview: slides change only when follow() is called, never by timer. */
+  private following = false;
   private readonly stage: HTMLElement;
   private readonly progress: HTMLElement;
   private readonly hooks: TickerHooks;
@@ -65,6 +67,36 @@ export class Ticker {
     } else {
       this.pending = manifest;
     }
+  }
+
+  /**
+   * Shows the slide a real display reported (live preview). Returns false when
+   * the slide is unknown, so the caller can re-fetch the manifest.
+   */
+  follow(slideId: string): boolean {
+    this.following = true;
+    clearTimeout(this.timer);
+    if (this.pending) this.apply(this.pending);
+    const index = this.slides.findIndex((slide) => slide.id === slideId);
+    if (index < 0) return false;
+    if (this.current?.slide.id === slideId) return true;
+    this.index = index;
+    return this.show(this.slides[index]);
+  }
+
+  /** Stops playback and forgets the manifest (display busy, released or not allowed). */
+  clear() {
+    this.manifest = null;
+    this.pending = null;
+    this.slides = [];
+    this.idle();
+  }
+
+  /** Back to playing on its own (live preview while the display is offline). */
+  autonomous() {
+    if (!this.following) return;
+    this.following = false;
+    this.advance();
   }
 
   private apply(manifest: Manifest) {
@@ -130,8 +162,10 @@ export class Ticker {
       }
     }
 
-    this.startProgress(slide.duration);
-    this.timer = setTimeout(this.advance, slide.duration * 1000);
+    if (!this.following) {
+      this.startProgress(slide.duration);
+      this.timer = setTimeout(this.advance, slide.duration * 1000);
+    }
     return true;
   }
 

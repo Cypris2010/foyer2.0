@@ -261,3 +261,83 @@ describe('Admin-Zugang', () => {
     expect(html.schema.properties.html.widget).toBe('code');
   });
 });
+
+describe('Ein Gerät pro Display', () => {
+  const asDevice = (ip: string, session: string): RequestInit => ({ headers: { 'x-test-remote': ip, 'x-foyer-session': session } });
+
+  it('weist ein zweites Gerät ab, solange das erste aktiv ist', async () => {
+    const { app, token } = await setup();
+    expect((await app.request(`/api/player/${token}/manifest`, asDevice('10.0.0.5', 'airtame'))).status).toBe(200);
+    const second = await app.request(`/api/player/${token}/manifest`, asDevice('10.0.0.9', 'laptop'));
+    expect(second.status).toBe(409);
+    expect((await second.json()).code).toBe('display-busy');
+    expect((await app.request(`/api/player/${token}/manifest`, asDevice('10.0.0.5', 'airtame'))).status).toBe(200);
+  });
+
+  it('lässt dasselbe Gerät nach einem Neuladen sofort wieder rein', async () => {
+    const { app, token } = await setup();
+    await app.request(`/api/player/${token}/manifest`, asDevice('10.0.0.5', 'vor-dem-reload'));
+    expect((await app.request(`/api/player/${token}/manifest`, asDevice('10.0.0.5', 'nach-dem-reload'))).status).toBe(200);
+    // Danach hält die neue Sitzung das Display.
+    expect((await app.request(`/api/player/${token}/manifest`, asDevice('10.0.0.9', 'laptop'))).status).toBe(409);
+  });
+
+  it('gibt das Display frei, wenn das Gerät 90 s still ist', async () => {
+    const { app, token, advance } = await setup();
+    await app.request(`/api/player/${token}/manifest`, asDevice('10.0.0.5', 'airtame'));
+    advance(89_000);
+    expect((await app.request(`/api/player/${token}/manifest`, asDevice('10.0.0.9', 'laptop'))).status).toBe(409);
+    advance(2_000);
+    expect((await app.request(`/api/player/${token}/manifest`, asDevice('10.0.0.9', 'laptop'))).status).toBe(200);
+  });
+
+  it('lässt Admins das Gerät freigeben und benachrichtigt es', async () => {
+    const { app, ctx, token, loginAs } = await setup();
+    await app.request(`/api/player/${token}/manifest`, asDevice('10.0.0.5', 'airtame'));
+    const received: string[] = [];
+    ctx.events.subscribe('d1', (event) => received.push(event));
+    expect((await app.request('/api/displays/d1/release', json('POST', {}, await loginAs('editor')))).status).toBe(403);
+    expect((await app.request('/api/displays/d1/release', json('POST', {}, await loginAs('admin')))).status).toBe(200);
+    expect(received).toContain('released');
+    expect((await app.request(`/api/player/${token}/manifest`, asDevice('10.0.0.9', 'laptop'))).status).toBe(200);
+  });
+
+  it('zeigt im Admin, welches Gerät das Display hält', async () => {
+    const { app, token, loginAs } = await setup();
+    await app.request(`/api/player/${token}/manifest`, asDevice('10.0.0.5', 'airtame'));
+    const list = await (await app.request('/api/displays', { headers: { cookie: await loginAs('viewer') } })).json();
+    expect(list[0].device.ip).toBe('10.0.0.5');
+  });
+});
+
+describe('Live-Vorschau', () => {
+  it('folgt der Folie, die das Display meldet', async () => {
+    const { app, ctx, token, loginAs } = await setup();
+    const cookie = await loginAs('viewer');
+    const seen: unknown[] = [];
+    ctx.events.subscribe('watch:d1', (event, data) => event === 'now-playing' && seen.push(data));
+    await app.request(`/api/player/${token}/now-playing`, json('POST', { slideId: 's-html', version: 'v1' }));
+    expect(seen).toHaveLength(1);
+    const preview = await (await app.request('/api/preview/displays/d1/manifest', { headers: { cookie } })).json();
+    expect(preview.nowPlaying.slideId).toBe('s-html');
+    // Vorschau-Dokumente sind als Vorschau signiert und aus jedem Netz abrufbar.
+    expect(preview.slides[1].documentUrl).toContain('d=preview%3Ad1');
+    const doc = await app.request(preview.slides[1].documentUrl, { headers: { 'x-test-remote': '8.8.8.8' } });
+    expect(doc.status).toBe(200);
+    expect(await doc.text()).toContain('<h1>Aula</h1>');
+  });
+
+  it('meldet ein Display ohne Lebenszeichen als offline', async () => {
+    const { app, token, loginAs, advance } = await setup();
+    await app.request(`/api/player/${token}/now-playing`, json('POST', { slideId: 's-text', version: 'v1' }));
+    advance(120_000);
+    const preview = await (await app.request('/api/preview/displays/d1/manifest', { headers: { cookie: await loginAs('viewer') } })).json();
+    expect(preview.nowPlaying).toBeNull();
+  });
+
+  it('verlangt eine Admin-Anmeldung', async () => {
+    const { app } = await setup();
+    expect((await app.request('/api/preview/displays/d1/manifest')).status).toBe(401);
+    expect((await app.request('/api/preview/displays/d1/events')).status).toBe(401);
+  });
+});
