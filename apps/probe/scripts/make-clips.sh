@@ -23,3 +23,7 @@ clip 1080p30-8M-high   1920x1080 30 8M high
 clip 1080p30-5M-main   1920x1080 30 5M main
 clip 1080p60-6M-high   1920x1080 60 6M high
 clip 1080p60-10M-high  1920x1080 60 10M high
+
+# Fragmented copy (no audio) for the MediaSource test: the same bytes a live player would append.
+[ -f mse-1080p30-5M-high.mp4 ] || ffmpeg -hide_banner -loglevel error -y -i 1080p30-5M-high.mp4 -c copy -an \
+  -movflags frag_keyframe+empty_moov+default_base_moof mse-1080p30-5M-high.mp4

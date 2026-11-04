@@ -1,0 +1,19 @@
+# Probe + live test source. From the repository root:
+#   docker compose -f apps/probe/live/compose.yaml up -d --build
+# Airtame URL: http://<server-ip>:8090/?device=aula-1 (the probe finds the live source on the same host).
+services:
+  probe:
+    build:
+      context: ../../..
+      dockerfile: apps/probe/Dockerfile
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ../../../probe-reports:/data
+  live:
+    image: bluenviron/mediamtx:1.21.2-ffmpeg
+    restart: unless-stopped
+    # WebRTC announces the host's own IPs; behind Docker's bridge the Airtames could not reach them.
+    network_mode: host
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml:ro
