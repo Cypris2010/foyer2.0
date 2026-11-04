@@ -77,6 +77,9 @@ const migrations: string[] = [
     at INTEGER NOT NULL
   );
   `,
+  // Display tokens stay retrievable for admins: AES-GCM encrypted with a key
+  // kept outside the database (token_hash remains the lookup key).
+  `ALTER TABLE displays ADD COLUMN token_enc TEXT;`,
 ];
 
 export type Db = DatabaseSync;

@@ -4,7 +4,8 @@
 import { createInterface } from 'node:readline/promises';
 import { openDb } from './db.ts';
 import { config } from './config.ts';
-import { hashPassword, randomToken, sha256 } from './crypto.ts';
+import { encrypt, hashPassword, randomToken, sha256 } from './crypto.ts';
+import { loadTokenKey } from './keys.ts';
 
 const [command, ...args] = process.argv.slice(2);
 const db = openDb(config.dataDir);
@@ -69,10 +70,10 @@ function seedDemo() {
     db.prepare('INSERT INTO channel_slides (channel_id, slide_id, position) VALUES (?, ?, ?)').run(channelId, slideId, position);
   });
   const token = randomToken();
-  db.prepare('INSERT INTO displays (id, name, token_hash, default_channel_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)').run(
-    crypto.randomUUID(), 'Demo-Display', sha256(token), channelId, now, now,
+  db.prepare('INSERT INTO displays (id, name, token_hash, token_enc, default_channel_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
+    crypto.randomUUID(), 'Demo-Display', sha256(token), encrypt(loadTokenKey(config.dataDir), token), channelId, now, now,
   );
-  console.log('Demo angelegt. Player-URL (nur jetzt sichtbar):');
+  console.log('Demo angelegt. Player-URL (später im Admin unter „URL anzeigen“):');
   console.log(`  http://localhost:${config.port}/p/${token}`);
 }
 

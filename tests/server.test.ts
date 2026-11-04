@@ -196,13 +196,53 @@ describe('Admin-Zugang', () => {
     expect(good.status).toBe(201);
   });
 
-  it('zeigt das Display-Token nur beim Anlegen', async () => {
+  it('gibt die Player-URL nicht in der Display-Liste aus', async () => {
     const { app, loginAs } = await setup();
     const cookie = await loginAs('admin');
     const created = await (await app.request('/api/displays', json('POST', { name: 'Flur' }, cookie))).json();
     expect(created.token).toHaveLength(43);
     const list = await (await app.request('/api/displays', { headers: { cookie } })).json();
     expect(JSON.stringify(list)).not.toContain(created.token);
+  });
+
+  it('lässt Admins die Player-URL jederzeit wieder abrufen und protokolliert es', async () => {
+    const { app, db, loginAs } = await setup();
+    const cookie = await loginAs('admin');
+    const created = await (await app.request('/api/displays', json('POST', { name: 'Flur' }, cookie))).json();
+    const revealed = await (await app.request(`/api/displays/${created.id}/reveal-url`, json('POST', {}, cookie))).json();
+    expect(revealed.playerPath).toBe(created.playerPath);
+    const logged = db.prepare("SELECT user_id FROM audit_log WHERE action = 'reveal-url'").get() as any;
+    expect(logged.user_id).toBe('admin');
+  });
+
+  it('liefert nach Rotation die neue URL', async () => {
+    const { app, loginAs } = await setup();
+    const cookie = await loginAs('admin');
+    const created = await (await app.request('/api/displays', json('POST', { name: 'Flur' }, cookie))).json();
+    const rotated = await (await app.request(`/api/displays/${created.id}/rotate-token`, json('POST', {}, cookie))).json();
+    const revealed = await (await app.request(`/api/displays/${created.id}/reveal-url`, json('POST', {}, cookie))).json();
+    expect(revealed.playerPath).toBe(rotated.playerPath);
+  });
+
+  it('zeigt die Player-URL nur Admins', async () => {
+    const { app, loginAs } = await setup();
+    const res = await app.request('/api/displays/d1/reveal-url', json('POST', {}, await loginAs('editor')));
+    expect(res.status).toBe(403);
+  });
+
+  it('speichert das Token nicht im Klartext', async () => {
+    const { app, db, loginAs } = await setup();
+    const cookie = await loginAs('admin');
+    const created = await (await app.request('/api/displays', json('POST', { name: 'Flur' }, cookie))).json();
+    const row = db.prepare('SELECT * FROM displays WHERE id = ?').get(created.id);
+    expect(JSON.stringify(row)).not.toContain(created.token);
+  });
+
+  it('meldet alte Displays ohne gespeicherte URL verständlich', async () => {
+    const { app, loginAs } = await setup();
+    const res = await app.request('/api/displays/d1/reveal-url', json('POST', {}, await loginAs('admin')));
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toContain('Neue URL');
   });
 
   it('protokolliert Änderungen im Audit-Log', async () => {

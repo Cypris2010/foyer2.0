@@ -16,7 +16,7 @@ import {
 import { getCookie } from 'hono/cookie';
 import { clientIp, ipAllowed } from './net.ts';
 import { audit, transaction } from './db.ts';
-import { randomToken, safeEqual, sha256 } from './crypto.ts';
+import { decrypt, encrypt, randomToken, safeEqual, sha256 } from './crypto.ts';
 import { buildManifest, buildSlideEntry, documentSignature, type DisplayRow } from './manifest.ts';
 import { parseConfig } from './registry.ts';
 import { hashPassword } from './crypto.ts';
@@ -207,10 +207,28 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
     const displayId = id();
     const token = randomToken();
     const now = ctx.now();
-    db.prepare('INSERT INTO displays (id, name, token_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?)').run(displayId, body.data.name, sha256(token), now, now);
+    db.prepare('INSERT INTO displays (id, name, token_hash, token_enc, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)').run(
+      displayId, body.data.name, sha256(token), encrypt(ctx.tokenKey, token), now, now,
+    );
     audit(db, c.get('user').id, 'create', 'display', displayId, { name: body.data.name });
-    // The token is shown exactly once; only its hash is stored.
     return c.json({ id: displayId, token, playerPath: `/p/${token}` }, 201);
+  });
+
+  // Admins can look the player URL up again; every lookup is audited.
+  admin.post('/displays/:id/reveal-url', adminOnly, (c) => {
+    const row = db.prepare('SELECT token_enc FROM displays WHERE id = ?').get(c.req.param('id')) as { token_enc: string | null } | undefined;
+    if (!row) return c.json({ error: 'Nicht gefunden' }, 404);
+    if (!row.token_enc) {
+      return c.json({ error: 'Für dieses Display ist keine URL gespeichert (vor dem Update angelegt). Bitte einmal „Neue URL“ erzeugen.' }, 409);
+    }
+    let token: string;
+    try {
+      token = decrypt(ctx.tokenKey, row.token_enc);
+    } catch {
+      return c.json({ error: 'URL kann nicht entschlüsselt werden (Schlüssel geändert?). Bitte „Neue URL“ erzeugen.' }, 409);
+    }
+    audit(db, c.get('user').id, 'reveal-url', 'display', c.req.param('id'), { ip: c.get('clientIp') });
+    return c.json({ playerPath: `/p/${token}` });
   });
 
   admin.patch('/displays/:id', editor, async (c) => {
@@ -239,7 +257,9 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
 
   admin.post('/displays/:id/rotate-token', adminOnly, (c) => {
     const token = randomToken();
-    const result = db.prepare('UPDATE displays SET token_hash = ?, updated_at = ? WHERE id = ?').run(sha256(token), ctx.now(), c.req.param('id'));
+    const result = db
+      .prepare('UPDATE displays SET token_hash = ?, token_enc = ?, updated_at = ? WHERE id = ?')
+      .run(sha256(token), encrypt(ctx.tokenKey, token), ctx.now(), c.req.param('id'));
     if (!result.changes) return c.json({ error: 'Nicht gefunden' }, 404);
     audit(db, c.get('user').id, 'rotate-token', 'display', c.req.param('id'));
     // Connected players with the old token reload and are rejected from then on.

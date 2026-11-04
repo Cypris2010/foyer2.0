@@ -135,7 +135,8 @@ Die WebUntis-Folien verarbeiten **personenbezogene Daten**: Namen bzw. Kürzel v
 
 ### 3.3 Player-Zugang (Airtame)
 
-- Jedes Display hat ein zufälliges Token (256 Bit), in der DB nur als SHA-256-Hash gespeichert, rotierbar mit einem Klick (alte URL ist sofort tot).
+- Jedes Display hat ein zufälliges Token (256 Bit), rotierbar mit einem Klick (alte URL ist sofort tot).
+- Gespeichert wird es zweifach: als SHA-256-Hash zum Nachschlagen und AES-256-GCM-verschlüsselt, damit Admins die URL jederzeit wieder anzeigen können („URL anzeigen“, nur Rolle `admin`, jeder Abruf im Audit-Log). Der Schlüssel liegt **außerhalb der Datenbank** (`data/token.key` mit Rechten 0600 oder `FOYER_TOKEN_KEY`). Eine Kopie von `foyer.sqlite` allein verrät also keine URLs; Schlüssel und DB-Backup getrennt aufbewahren.
 - Das Token steht im URL-Pfad, weil Airtame keine Eingabe und keine Header erlaubt. Gegen Abfluss über die URL: `Referrer-Policy: no-referrer`, keine Tokens in Server-Logs (Logger maskiert `/p/<token>`), keine externen Ressourcen auf der Player-Seite.
 - **Zweiter Faktor über das Netz:** Player-Endpunkte akzeptieren Anfragen nur aus konfigurierten Netzen (z. B. Airtame-VLAN als CIDR), global und optional pro Display. Ein geleaktes Token ist von außerhalb nutzlos.
 - Player-Antworten mit `Cache-Control: no-store`, außer bei Hash-benannten Assets ohne Personenbezug.

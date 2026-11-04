@@ -8,6 +8,8 @@ export interface AppContext {
   events: EventHub;
   /** HMAC secret for signed content URLs, generated on first start. */
   secret: string;
+  /** AES key for stored display tokens (see keys.ts). */
+  tokenKey: Buffer;
   locale: string;
   timeZone: string;
   playerNetworks: string[];

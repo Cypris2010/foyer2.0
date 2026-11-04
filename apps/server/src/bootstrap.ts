@@ -4,6 +4,7 @@ import { loadRegistry } from './registry.ts';
 import { EventHub } from './events.ts';
 import { config } from './config.ts';
 import type { AppContext } from './context.ts';
+import { loadTokenKey } from './keys.ts';
 
 export function contentSecret(db: Db): string {
   let secret = getSetting(db, 'content_secret');
@@ -20,6 +21,7 @@ export async function createContext(db: Db = openDb(config.dataDir)): Promise<Ap
     registry: await loadRegistry(config.slideTypesDir),
     events: new EventHub(),
     secret: contentSecret(db),
+    tokenKey: loadTokenKey(config.dataDir),
     locale: config.locale,
     timeZone: config.timeZone,
     playerNetworks: config.playerNetworks,

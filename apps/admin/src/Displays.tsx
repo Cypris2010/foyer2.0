@@ -80,6 +80,15 @@ export function Displays({ user, onError }: { user: User; onError: (e: unknown) 
     }
   };
 
+  const reveal = async (display: Display) => {
+    try {
+      const res = await api.post<{ playerPath: string }>(`/displays/${display.id}/reveal-url`);
+      setRevealed({ name: display.name, url: playerUrl(res.playerPath) });
+    } catch (e) {
+      onError(e);
+    }
+  };
+
   const patch = (display: Display, body: Partial<Display>) => api.patch(`/displays/${display.id}`, body).then(load).catch(onError);
   const action = (display: Display, what: 'reload' | 'identify') => api.post(`/displays/${display.id}/${what}`).catch(onError);
   const remove = (display: Display) =>
@@ -90,7 +99,8 @@ export function Displays({ user, onError }: { user: User; onError: (e: unknown) 
       <h1>Displays</h1>
       {revealed && (
         <div className="notice">
-          <strong>Player-URL für „{revealed.name}“</strong> (wird nur jetzt angezeigt; in Airtame Cloud als Website eintragen):
+          <strong>Player-URL für „{revealed.name}“</strong>
+          <span>In Airtame Cloud als Website eintragen. Wer diese URL kennt, sieht aus dem Schulnetz die Inhalte des Displays, also nicht weitergeben.</span>
           <code className="secret">{revealed.url}</code>
           <button onClick={() => navigator.clipboard?.writeText(revealed.url)}>Kopieren</button>
           <button onClick={() => setRevealed(null)}>Schließen</button>
@@ -144,6 +154,7 @@ export function Displays({ user, onError }: { user: User; onError: (e: unknown) 
               <div className="row">
                 <button onClick={() => action(display, 'identify')}>Identifizieren</button>
                 <button onClick={() => action(display, 'reload')}>Neu laden</button>
+                {can(user, 'admin') && <button onClick={() => reveal(display)}>URL anzeigen</button>}
                 {can(user, 'admin') && <button onClick={() => rotate(display)}>Neue URL</button>}
                 {can(user, 'admin') && <button className="danger" onClick={() => remove(display)}>Löschen</button>}
               </div>

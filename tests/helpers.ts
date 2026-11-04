@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { randomBytes } from 'node:crypto';
 import { createApp } from '../apps/server/src/app.ts';
 import { openDbAt } from '../apps/server/src/db.ts';
 import { loadRegistry } from '../apps/server/src/registry.ts';
@@ -20,6 +21,7 @@ export async function setup(now = Date.parse('2026-11-04T10:00:00Z')) {
     registry: await loadRegistry(slideTypesDir),
     events: new EventHub(),
     secret: 'test-secret',
+    tokenKey: randomBytes(32),
     locale: 'de-DE',
     timeZone: 'Europe/Berlin',
     playerNetworks: ['10.0.0.0/8', '127.0.0.0/8'],
