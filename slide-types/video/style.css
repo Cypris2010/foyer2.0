@@ -1,0 +1,4 @@
+.foyer-slide--video { background: #000; }
+.foyer-video { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: block; background: #000; }
+.foyer-video--cover { object-fit: cover; }
+.foyer-video--contain { object-fit: contain; }

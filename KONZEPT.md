@@ -414,12 +414,12 @@ Für den Start reicht „Ordner ins Repo, neu bauen“. Wenn Typen *ohne Rebuild
 
 **1. Upload-Pipeline (Server, Hintergrundjob)**
 - `ffprobe` liest Dauer, Auflösung, Codec und Rotation; die Werte landen in der DB.
-- `ffmpeg` erzeugt ein **Standardprofil**: H.264 (High, Level 4.1) + AAC, MP4 mit `+faststart`, max. 1080p30, ~5 Mbit/s. Zusätzlich eine **720p-Variante**; das Display-Profil wählt die Variante. Für Airtame 2 legen die Probe-Messungen (2.3) das Standardprofil fest. Bis dahin gilt 1080p30 als Ziel, 60 fps nur nach erfolgreichem Test.
+- `ffmpeg` erzeugt ein **Standardprofil**: H.264 (High, Level 4.1) + AAC, MP4 mit `+faststart`, max. 1080p30, ~5 Mbit/s. Zusätzlich eine **720p-Variante**; das Display-Profil wählt die Variante. Für Airtame 2 haben die Probe-Messungen (2.3) das Standardprofil bestätigt: Das Gerät stellt höchstens 30 fps dar, 1080p60 verliert ~50 % der Bilder, 1080p30 mit 5 Mbit/s nur ~4 %. 50/60-fps-Quellen werden deshalb auf 25/30 fps halbiert.
 - Ein **Trim (Start/Ende) wird beim Transkodieren angewendet** und erzeugt einen eigenen Clip. Damit gibt es kein Seek beim Abspielen und die Dauer stimmt exakt.
 - Ein Posterbild entsteht für Vorschau und als Standbild während des Ladens.
 - Inhaltsbasierte Dateinamen (`<sha256>.mp4`) → unbegrenzt cachebar.
 
-**2. Dauer ist deterministisch**
+**2. Dauer ist deterministisch** (umgesetzt: Folientyp `video`, SDK-Feld `durationFromMedia`)
 - Bei einer Video-Slide ist die Dauer standardmäßig gleich der Clip-Länge, weil die Dauer per ffprobe bekannt ist. „Slide halten“ ist damit kein Sonderfall mehr. Der Ticker plant mit der echten Dauer und schaltet zusätzlich beim `ended`-Event weiter (Sicherheitsnetz: Timeout = Dauer + 3 s).
 - „Loop bis Slide-Dauer“ bleibt als Option für kurze Loops (Hintergrundvideos).
 
@@ -492,7 +492,7 @@ audit_log(id, user_id, action, entity, entity_id, at, diff_json)   -- optional, 
   - **Regeln auf dem Display** (`apps/server/src/planning.ts`): Exklusive Termine zeigen nur sich selbst. Sonst ersetzt ein geplanter Channel den Standard-Channel; **mehrere gleichzeitig werden gekoppelt** (Folien nacheinander). Geplante Einzelfolien kommen zum laufenden Programm hinzu. Der Kalender markiert gekoppelte Termine.
   - Serien rechnen in Schulzeit (Wandzeit, DST-sicher) mit `rrule`; „endet nach N“ zählt ab Serienbeginn (in wp-foyer falsch). Ferien werden nicht berücksichtigt (bewusst entschieden).
   - Noch offen: Vorlagen auf mehrere Displays anwenden (wp-foyer „Templates“), Wochen-Zeitstrahl, „Vorschau für Zeitpunkt“.
-- **Medienbibliothek**: Upload mit Fortschritt, Status der Transkodierung, Belegt-in-Anzeige.
+- **Medienbibliothek** (umgesetzt, `apps/admin/src/Media.tsx`, Server `apps/server/src/media.ts`): Upload per Drag & Drop mit Fortschritt, Status und Fortschritt der Transkodierung, „Verwendet in“, Löschschutz für genutzte Dateien, Auswahl-Dialog mit Upload für Folienhintergründe (Bild/Video, Abdunkeln) und das Formular-Widget `widget: 'media'`.
 - **Einstellungen**: Zeitzone, Datumsformat, Standarddauer/-übergang, Hintergrund-Zoom, Datenquellen-Proxy (Untis-URLs, die der Server durchreicht; die URL pro Folie bleibt wie heute), Rollen.
 - Die WP-Sonderfälle (Login-Redirect, WP-Menüs ausblenden) entfallen, weil es ein eigenes Admin gibt.
 

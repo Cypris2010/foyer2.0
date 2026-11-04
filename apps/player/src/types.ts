@@ -1,4 +1,10 @@
 // Mirrors apps/server/src/manifest.ts (kept separate so the player bundle has no server imports).
+import type { MediaInfo } from '@foyer/slide-sdk';
+export type Background =
+  | { kind: 'color'; value: string }
+  | { kind: 'image'; url: string; fit: 'cover' | 'contain'; dim: number }
+  | { kind: 'video'; url: string; poster: string | null; dim: number };
+
 export interface ManifestSlide {
   id: string;
   type: string;
@@ -8,18 +14,22 @@ export interface ManifestSlide {
   config: unknown;
   data: unknown;
   documentUrl?: string;
-  background: { kind: 'color'; value: string } | null;
+  background: Background | null;
+  media: Record<string, MediaInfo>;
+  playsToEnd: boolean;
   error?: string;
 }
 
 export interface Manifest {
   version: string;
   generatedAt: string;
-  display: { id: string; name: string; showProgress: boolean; orientation: string };
+  display: { id: string; name: string; showProgress: boolean; orientation: string; soundAllowed?: boolean };
   channel: { id: string; name: string; transition: 'fade' | 'slide' | 'none' } | null;
   slides: ManifestSlide[];
   nextChange: string | null;
   settings: { locale: string; timeZone: string };
+  /** Player bundle the server serves; when it differs from ours, reload (update.ts). */
+  playerBuild?: string | null;
   /** Display previews only: the slide the real player reported last; null = offline. */
   nowPlaying?: { slideId: string | null; version: string | null; at: number } | null;
 }

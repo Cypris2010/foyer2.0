@@ -130,6 +130,10 @@ function DisplayCard({ display, channels, user, onChanged, onReveal, onError }: 
               <input type="checkbox" checked={display.showProgress} onChange={(e) => patch({ showProgress: e.target.checked })} />
               Fortschrittsbalken
             </label>
+            <label className="field field--check">
+              <input type="checkbox" checked={display.soundAllowed} onChange={(e) => patch({ soundAllowed: e.target.checked })} />
+              Ton erlaubt (Videofolien mit „Mit Ton“ spielen hier hörbar)
+            </label>
             {can(user, 'admin') && (
               <>
                 <label className="field">

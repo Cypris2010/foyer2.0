@@ -1,6 +1,7 @@
 import './styles.css';
 import { clearCachedManifest, endpointsFromPath, fetchManifest, HttpError, loadCachedManifest, postJson, storeManifest } from './api.ts';
 import { Ticker } from './ticker.ts';
+import { createUpdateCheck } from './update.ts';
 import type { Manifest } from './types.ts';
 
 const HEARTBEAT_MS = 30_000;
@@ -40,9 +41,12 @@ if (!endpoints) {
   let pausedUntil = 0;
   let source: EventSource | null = null;
 
+  const update = createUpdateCheck(recordError);
   const ticker = new Ticker(stage, progress, {
     onError: recordError,
     onSlideChange: (slide) => {
+      // New Foyer version on the server: reload between slides, never mid-slide.
+      if (update.due) return location.reload();
       // Lets the admin's live preview follow this display.
       if (endpoints.nowPlaying && active) {
         postJson(endpoints.nowPlaying, { slideId: slide?.id ?? null, version: ticker.version }).catch(() => undefined);
@@ -84,6 +88,9 @@ if (!endpoints) {
       active = true;
       overlay.hidden = true;
       storeManifest(endpoints.cacheKey, manifest);
+      update.check(manifest.playerBuild);
+      // Nothing on screen: no boundary to wait for.
+      if (update.due && !ticker.currentSlideId) return location.reload();
       ticker.setManifest(manifest);
       if (endpoints.mode === 'live') followDisplay(manifest);
       if (!wasActive) openEvents();

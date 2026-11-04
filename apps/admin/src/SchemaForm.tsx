@@ -1,12 +1,16 @@
 // Renders an edit form from a slide type's JSON schema (generated from its Zod
 // config). New slide types get a working form without admin code changes.
-import type { JsonSchemaProperty } from './api.ts';
+import type { JsonSchemaProperty, User } from './api.ts';
+import { MediaField } from './Media.tsx';
 
 interface Props {
   schema: { properties: Record<string, JsonSchemaProperty> };
   value: Record<string, unknown>;
   onChange: (value: Record<string, unknown>) => void;
   disabled?: boolean;
+  /** Needed by media fields (picker with upload). */
+  user?: User;
+  onError?: (e: unknown) => void;
 }
 
 function kind(prop: JsonSchemaProperty): string {
@@ -23,7 +27,7 @@ export function defaultsFor(schema: Props['schema']): Record<string, unknown> {
   return out;
 }
 
-export function SchemaForm({ schema, value, onChange, disabled }: Props) {
+export function SchemaForm({ schema, value, onChange, disabled, user, onError = () => undefined }: Props) {
   const set = (name: string, v: unknown) => onChange({ ...value, [name]: v });
   return (
     <div className="form">
@@ -59,6 +63,21 @@ export function SchemaForm({ schema, value, onChange, disabled }: Props) {
               </label>
             );
           default:
+            if (prop.widget === 'media' && user) {
+              return (
+                <div key={name} className="field">
+                  <span>{label}</span>
+                  <MediaField
+                    kind={prop.accept ?? 'image'}
+                    value={typeof current === 'string' && current ? current : null}
+                    user={user}
+                    disabled={disabled}
+                    onError={onError}
+                    onChange={(id) => set(name, id ?? '')}
+                  />
+                </div>
+              );
+            }
             if (prop.widget === 'textarea' || prop.widget === 'code') {
               return (
                 <label key={name} className="field">

@@ -2,6 +2,8 @@
 import type { AppContext } from './context.ts';
 import { hmac, sha256 } from './crypto.ts';
 import { activeChannelSlides, displayContent, minTime } from './planning.ts';
+import { mediaFields, mediaInfo, resolveBackground, type ManifestBackground } from './background.ts';
+import type { MediaInfo } from '@foyer/slide-sdk';
 
 /** Seconds for single slides scheduled without a channel around them. */
 const DEFAULT_DURATION = 10;
@@ -13,6 +15,7 @@ export interface DisplayRow {
   show_progress: number;
   orientation: 'landscape' | 'portrait';
   networks: string;
+  sound_allowed: number;
 }
 
 interface ChannelRow {
@@ -41,19 +44,25 @@ export interface ManifestSlide {
   config: unknown;
   data: unknown;
   documentUrl?: string;
-  background: unknown;
+  background: ManifestBackground | null;
+  /** Files of the config's media fields, keyed by media id. */
+  media: Record<string, MediaInfo>;
+  /** Duration is the media length: the slide ends when the media ends (timer is a safety net). */
+  playsToEnd: boolean;
   error?: string;
 }
 
 export interface Manifest {
   version: string;
   generatedAt: string;
-  display: { id: string; name: string; showProgress: boolean; orientation: string };
+  display: { id: string; name: string; showProgress: boolean; orientation: string; soundAllowed: boolean };
   channel: { id: string; name: string; transition: string } | null;
   slides: ManifestSlide[];
   /** When the content changes next (calendar); the player re-fetches then. */
   nextChange: string | null;
   settings: { locale: string; timeZone: string };
+  /** Player bundle the server serves; outdated players reload (not part of `version`). */
+  playerBuild: string | null;
 }
 
 const dataCache = new Map<string, { value: unknown; expires: number }>();
@@ -103,11 +112,32 @@ export async function buildSlideEntry(
     keepAlive: entry.definition.keepAlive ?? false,
     config: parsed.success ? parsed.data : null,
     data: null,
-    background: slide.background_json ? JSON.parse(slide.background_json) : null,
+    background: slide.background_json ? resolveBackground(ctx, JSON.parse(slide.background_json)) : null,
+    media: {},
+    playsToEnd: false,
   };
   if (!parsed.success) {
     result.error = 'Ungültige Konfiguration';
     return result;
+  }
+  const config = parsed.data as Record<string, unknown>;
+  for (const field of mediaFields(entry.jsonSchema)) {
+    const id = config[field.name];
+    if (typeof id !== 'string' || !id) continue;
+    const info = mediaInfo(ctx, id);
+    // Still being converted: leave the slide out until it is ready (players are notified then).
+    if (info === 'pending') return null;
+    if (!info) {
+      result.error = 'Die gewählte Datei fehlt oder konnte nicht umgewandelt werden';
+      return result;
+    }
+    result.media[id] = info;
+  }
+  const lengthField = entry.definition.durationFromMedia;
+  const length = lengthField ? result.media[config[lengthField] as string]?.duration : null;
+  if (slide.duration === null && length) {
+    result.duration = Math.round(length * 10) / 10;
+    result.playsToEnd = true;
   }
   try {
     result.data = await resolveData(ctx, slide, parsed.data, displayId);
@@ -164,11 +194,18 @@ export async function buildManifest(ctx: AppContext, display: DisplayRow, opts: 
 
   const lead = channels[0];
   const body = {
-    display: { id: display.id, name: display.name, showProgress: display.show_progress === 1, orientation: display.orientation },
+    display: {
+      id: display.id,
+      name: display.name,
+      showProgress: display.show_progress === 1,
+      orientation: display.orientation,
+      // Admin previews stay silent.
+      soundAllowed: !opts.preview && display.sound_allowed === 1,
+    },
     channel: lead ? { id: lead.id, name: channels.map((c) => c.name).join(' + '), transition: lead.transition } : null,
     slides,
     nextChange: nextChange === null ? null : new Date(nextChange).toISOString(),
     settings: { locale: ctx.locale, timeZone: ctx.timeZone },
   };
-  return { version: sha256(JSON.stringify(body)).slice(0, 16), generatedAt: new Date(now).toISOString(), ...body };
+  return { version: sha256(JSON.stringify(body)).slice(0, 16), generatedAt: new Date(now).toISOString(), ...body, playerBuild: ctx.playerBuild() };
 }

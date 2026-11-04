@@ -20,6 +20,11 @@ export interface SlideTypeDefinition<S extends z.ZodType = z.ZodType> {
   backgrounds?: BackgroundKind[] | false;
   /** Seconds; falls back to the channel default. */
   defaultDuration?: number;
+  /**
+   * Config field (a media widget) whose length is the slide's duration when the
+   * slide sets none: the media plays once and the slide ends with it (KONZEPT 6.2).
+   */
+  durationFromMedia?: string;
   /** Keep mounted (hidden) between appearances instead of re-creating it. */
   keepAlive?: boolean;
   /** Minimum role to create or edit slides of this type. */
@@ -77,6 +82,8 @@ export interface PlayerContext {
   locale: string;
   timeZone: string;
   displayName: string;
+  /** The display may play sound (set per display; off in admin previews). */
+  soundAllowed: boolean;
   /** Lets the slide end early, e.g. when an animation or video finished. */
   done(): void;
   reportError(error: unknown): void;
@@ -96,10 +103,25 @@ export interface SlideInstance {
   destroy?(): void;
 }
 
+/** A media library file referenced by a `widget: 'media'` config field. */
+export interface MediaInfo {
+  kind: 'image' | 'video';
+  url: string;
+  poster: string | null;
+  width: number;
+  height: number;
+  /** Seconds (videos). */
+  duration: number | null;
+}
+
 export interface RenderProps<C, D> {
   config: C;
   data: D;
   ctx: PlayerContext;
+  /** Files of the config's media fields, keyed by media id; only ready ones. */
+  media: Record<string, MediaInfo>;
+  /** Duration is the media length (durationFromMedia): play once, call done() at the end. */
+  playsToEnd: boolean;
   /** Set when the type's server implements `document()`. */
   documentUrl?: string;
 }
