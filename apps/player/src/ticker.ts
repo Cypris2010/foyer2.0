@@ -13,19 +13,27 @@ const CATCH_UP_MIN_S = 1;
 
 interface Mounted {
   key: string;
+  /** Hash of the data the instance shows. */
+  data: number;
   slide: ManifestSlide;
   el: HTMLElement;
   instance: SlideInstance;
   background: BackgroundControl;
 }
 
-// Cheap content signature: a slide is re-mounted only when its content changed.
-function signature(slide: ManifestSlide): string {
-  const text = JSON.stringify([slide.type, slide.config, slide.data, slide.documentUrl, slide.background, slide.media, slide.playsToEnd]);
-  let hash = 5381;
-  for (let i = 0; i < text.length; i++) hash = ((hash << 5) + hash + text.charCodeAt(i)) | 0;
-  return `${slide.id}:${hash}`;
+function hash(text: string): number {
+  let value = 5381;
+  for (let i = 0; i < text.length; i++) value = ((value << 5) + value + text.charCodeAt(i)) | 0;
+  return value;
 }
+
+// Cheap content signature: a slide is re-mounted only when its content changed.
+// Data is left out: new data goes to update() of the mounted slide (see mount()).
+function signature(slide: ManifestSlide): string {
+  return `${slide.id}:${hash(JSON.stringify([slide.type, slide.config, slide.documentUrl, slide.background, slide.media, slide.playsToEnd]))}`;
+}
+
+const dataHash = (slide: ManifestSlide) => hash(JSON.stringify(slide.data ?? null));
 
 export interface TickerHooks {
   onError(message: string): void;
@@ -78,6 +86,11 @@ export class Ticker {
       this.advance();
     } else {
       this.pending = manifest;
+      // New data (refreshSeconds) shows right away, not only at the next slide.
+      for (const slide of manifest.slides) {
+        const mounted = this.mounted.get(signature(slide));
+        if (mounted?.instance.update) this.mount(slide);
+      }
     }
   }
 
@@ -200,7 +213,23 @@ export class Ticker {
   private mount(slide: ManifestSlide): Mounted | null {
     const key = signature(slide);
     const existing = this.mounted.get(key);
-    if (existing) return existing;
+    if (existing) {
+      const data = dataHash(slide);
+      if (data === existing.data) return existing;
+      if (existing.instance.update) {
+        try {
+          existing.instance.update(slide.data);
+        } catch (err) {
+          this.hooks.onError(`${slide.title}: ${String((err as Error)?.message ?? err)}`);
+        }
+        existing.slide = slide;
+        existing.data = data;
+        return existing;
+      }
+      // Without update(): the visible slide keeps its data, a hidden one is rebuilt.
+      if (existing === this.current || existing.el.classList.contains('is-leaving')) return existing;
+      this.unmount(existing);
+    }
     const renderer = renderers.get(slide.type);
     if (!renderer || !this.manifest) return null;
 
@@ -223,7 +252,7 @@ export class Ticker {
     try {
       const instance =
         renderer(el, { config: slide.config, data: slide.data, ctx, documentUrl: slide.documentUrl, media: slide.media ?? {}, playsToEnd: slide.playsToEnd === true }) || {};
-      const mounted = { key, slide, el, instance, background };
+      const mounted = { key, data: dataHash(slide), slide, el, instance, background };
       this.mounted.set(key, mounted);
       return mounted;
     } catch (err) {
@@ -243,15 +272,19 @@ export class Ticker {
     for (const slide of this.slides) if (slide.keepAlive) keep.add(signature(slide));
     for (const [key, mounted] of this.mounted) {
       if (keep.has(key) || mounted.el.classList.contains('is-leaving')) continue;
-      try {
-        mounted.instance.destroy?.();
-      } catch (err) {
-        this.hooks.onError(String(err));
-      }
-      mounted.background.destroy();
-      mounted.el.remove();
-      this.mounted.delete(key);
+      this.unmount(mounted);
     }
+  }
+
+  private unmount(mounted: Mounted) {
+    try {
+      mounted.instance.destroy?.();
+    } catch (err) {
+      this.hooks.onError(String(err));
+    }
+    mounted.background.destroy();
+    mounted.el.remove();
+    this.mounted.delete(mounted.key);
   }
 
   private idle() {

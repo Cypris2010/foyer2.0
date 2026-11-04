@@ -17,7 +17,7 @@ import { getCookie } from 'hono/cookie';
 import { clientIp, ipAllowed } from './net.ts';
 import { audit, transaction } from './db.ts';
 import { decrypt, encrypt, randomToken, safeEqual, sha256 } from './crypto.ts';
-import { buildManifest, buildSlideEntry, documentSignature, type DisplayRow } from './manifest.ts';
+import { buildManifest, buildSlideEntry, dataSignature, documentSignature, slideData, type DisplayRow, type SlideRow } from './manifest.ts';
 import { parseConfig } from './registry.ts';
 import { hashPassword } from './crypto.ts';
 import { securityHeaders } from './headers.ts';
@@ -199,8 +199,18 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
     const entry = registry.get(c.req.param('type'));
     const provider = entry?.server.options?.[c.req.param('name')];
     if (!provider) return c.json({ error: 'Nicht gefunden' }, 404);
-    const partial = JSON.parse(c.req.query('config') ?? '{}');
-    return c.json(await provider(partial, { locale: ctx.locale, timeZone: ctx.timeZone }));
+    let partial: unknown;
+    try {
+      partial = JSON.parse(c.req.query('config') ?? '{}');
+    } catch {
+      return c.json({ error: 'Ungültige Konfiguration' }, 400);
+    }
+    try {
+      return c.json(await provider(partial && typeof partial === 'object' ? partial : {}, { locale: ctx.locale, timeZone: ctx.timeZone }));
+    } catch (err) {
+      // E.g. the data source is unreachable; the admin shows the message.
+      return c.json({ error: (err as Error).message }, 502);
+    }
   });
 
   // Displays
@@ -636,6 +646,28 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
       return c.text('Nicht erlaubt', 403);
     }
     return (await ctx.media.serve(c.req.param('file'), c.req.header('range'))) ?? c.notFound();
+  });
+
+  // --- Personal slide data (personalData types, e.g. Untis) ---------------------
+  // Kept out of the manifest so players never cache it offline (KONZEPT 3.1).
+  // Displays: signed URL from their manifest, school networks only. Admin
+  // previews: signed URL plus a session.
+  app.get('/content/data/:id/:version', async (c) => {
+    const slideId = c.req.param('id');
+    const version = Number(c.req.param('version'));
+    const displayId = c.req.query('d') ?? '';
+    if (!safeEqual(c.req.query('s') ?? '', dataSignature(ctx, slideId, version, displayId))) return c.json({ error: 'Nicht erlaubt' }, 403);
+    const isPreview = displayId === 'preview' || displayId.startsWith('preview:');
+    const allowed = isPreview ? sessionUser(db, getCookie(c, SESSION_COOKIE)) : ipAllowed(c.get('clientIp'), ctx.playerNetworks);
+    if (!allowed) return c.json({ error: 'Nicht erlaubt' }, 403);
+    const row = db.prepare('SELECT * FROM slides WHERE id = ?').get(slideId) as SlideRow | undefined;
+    if (!row || row.updated_at !== version || !registry.get(row.type)?.definition.personalData) return c.json({ error: 'Nicht gefunden' }, 404);
+    c.header('Cache-Control', 'no-store');
+    try {
+      return c.json({ data: await slideData(ctx, row, displayId) });
+    } catch (err) {
+      return c.json({ error: `Daten nicht verfügbar: ${(err as Error).message}` }, 502);
+    }
   });
 
   // --- Sandboxed slide documents (HTML slides) --------------------------------

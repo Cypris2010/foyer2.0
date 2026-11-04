@@ -1,0 +1,152 @@
+LACH|2026-11-04 11:25:00|2026-11-04 12:10:00|B 2.10|LACH|6a1|F02|None|Unterricht||
+LACX|2026-11-04 10:20:00|2026-11-04 11:05:00|D 3.04|LACX|11b1|F62|None|Unterricht||
+LACY|2026-11-04 19:00:00|2026-11-04 19:45:00|D 3.04|LACY|5b,11c1|F33|None|Unterricht||
+LADM|-|-|-|-|-|-|NoData|-|-
+LAAN|2026-11-04 11:25:00|2026-11-04 12:10:00|C 1.07|LAAN|7a|F10/F11|cancelled|Unterricht||
+LADN|-|-|-|-|-|-|NoData|-|-
+LAAB|2026-11-04 10:20:00|2026-11-04 11:05:00|A 1.01|LAAB|5a|F02|None|Unterricht||
+LABE|2026-11-04 10:20:00|2026-11-04 11:05:00|A 1.21|LABE|11a|F27|None|Unterricht||
+LADO|-|-|-|-|-|-|NoData|-|-
+LABH|2026-11-04 11:25:00|2026-11-04 12:10:00|D 1.24|LABH|11c|F32|None|Unterricht||
+LADP|-|-|-|-|-|-|Gone|-|-
+LAAT|2026-11-04 09:35:00|2026-11-04 11:05:00|D 1.12|LAAT,LAAU|||None|Konferenz||
+LADK|2026-11-04 11:25:00|2026-11-04 12:10:00|C 3.15/D 3.16|LADK|9d1|F85|None|Unterricht||
+LADQ|-|-|-|-|-|-|NoData|-|-
+LABD|2026-11-04 10:20:00|2026-11-04 11:05:00|D 1.24|LABD|11c|F32|None|Unterricht||
+LACT|2026-11-04 10:20:00|2026-11-04 11:05:00|D 2.32|LACT|11a|F55|None|Unterricht||
+LACT|2026-11-04 10:20:00|2026-11-04 11:05:00||LACT|11a|F94|None|Unterricht||
+LADR|-|-|-|-|-|-|NoData|-|-
+LADS|-|-|-|-|-|-|NoData|-|-
+LACA|2026-11-04 07:45:00|2026-11-04 15:05:00|C 2.11|LACA,LABL|12c||irregular|Veranstaltung|Hinweis 3|
+LAAM|2026-11-04 11:25:00|2026-11-04 12:10:00|C 1.07|LAAM|7a|F01|irregular|Unterricht||
+LADT|-|-|-|-|-|-|NoData|-|-
+LABV|2026-11-04 10:20:00|2026-11-04 11:05:00|A 2.01|LABV|13b,13c,10d,13d,5a1|F03|None|Unterricht||
+LADU|-|-|-|-|-|-|NoData|-|-
+LADV|-|-|-|-|-|-|NoData|-|-
+LADW|-|-|-|-|-|-|NoData|-|-
+LACB|2026-11-04 11:25:00|2026-11-04 12:10:00|A 1.09|LACB|7d|F02|None|Unterricht||
+LAAK|2026-11-04 10:20:00|2026-11-04 11:05:00|+A 1.05(B 1.06)|LAAK|6d|F05|None|Unterricht||
+LADX|-|-|-|-|-|-|NoData|-|-
+LAAP|2026-11-04 10:20:00|2026-11-04 11:05:00|+D 1.08(A 1.09)|LAAP|7c|F12|irregular|Unterricht||
+LABX|2026-11-04 10:20:00|2026-11-04 11:05:00|D 2.04|LABX|8c|F01|None|Unterricht||
+LABQ|2026-11-04 10:20:00|2026-11-04 11:05:00|+B 1.34(C 1.35)|LABQ|7b|F10/F11|None|Unterricht||
+LACO|2026-11-04 10:20:00|2026-11-04 11:05:00|D 2.28|LACO|9b1|F01|None|Unterricht||
+LADY|-|-|-|-|-|-|NoData|-|-
+LABZ|2026-11-04 10:20:00|2026-11-04 11:05:00|C 2.39|LABZ|7c1,7d,6a1|F56|None|Unterricht||
+LABU|2026-11-04 11:25:00|2026-11-04 12:10:00|B 1.06|LABU|6d|F02|None|Unterricht||
+LADZ|-|-|-|-|-|-|NoData|-|-
+LABO|2026-11-04 10:20:00|2026-11-04 11:05:00|D 1.32|LABO|13a|F01|None|Unterricht||
+LAEA|-|-|-|-|-|-|NoData|-|-
+LAEB|-|-|-|-|-|-|NoData|-|-
+LADA|2026-11-04 11:25:00|2026-11-04 12:10:00|B 3.06|LADA|10c1|F10/F11|None|Unterricht||
+LAEC|-|-|-|-|-|-|NoData|-|-
+LAAQ|2026-11-04 10:20:00|2026-11-04 11:05:00||LAAQ||F95|None|Unterricht||
+LAED|-|-|-|-|-|-|NoData|-|-
+LACZ|2026-11-04 10:20:00|2026-11-04 11:05:00|B 3.06|LACZ|10c1|F68|None|Unterricht||
+LAEE|-|-|-|-|-|-|NoData|-|-
+LABI|2026-11-04 10:20:00|2026-11-04 11:05:00|B 2.06|LABI|6b1|F01|None|Unterricht||
+LAEF|-|-|-|-|-|-|NoData|-|-
+LAEG|-|-|-|-|-|-|NoData|-|-
+LACM|2026-11-04 07:45:00|2026-11-04 15:05:00|D 2.16|LACM,LACJ,LACN|8b1||irregular|Veranstaltung|Hinweis 3|
+LAEH|-|-|-|-|-|-|NoData|-|-
+LAEI|-|-|-|-|-|-|NoData|-|-
+LACD|2026-11-04 10:20:00|2026-11-04 11:05:00|C 2.15|LACD|8a1|F03|None|Unterricht||
+LAEJ|-|-|-|-|-|-|NoData|-|-
+LAEK|-|-|-|-|-|-|NoData|-|-
+LAEL|-|-|-|-|-|-|NoData|-|-
+LAEM|-|-|-|-|-|-|NoData|-|-
+LAEN|-|-|-|-|-|-|NoData|-|-
+LACP|2026-11-04 10:20:00|2026-11-04 11:05:00|A 2.21|LACP|12d|F45|None|Unterricht||
+LABW|2026-11-04 10:20:00|2026-11-04 11:05:00|C 2.07|LABW|6d1|F33|None|Unterricht||
+LAAE|2026-11-04 17:30:00|2026-11-04 18:15:00|A 1.01|LAAE|5b,5c|F04|None|Unterricht||
+LAEO|-|-|-|-|-|-|NoData|-|-
+LAEP|-|-|-|-|-|-|NoData|-|-
+LAEQ|2026-11-04 10:20:00|2026-11-04 11:05:00||LAEQ||F39|None|Unterricht||
+LAAU|2026-11-04 09:35:00|2026-11-04 11:05:00|D 1.12|LAAT,LAAU|||None|Konferenz||
+LAER|-|-|-|-|-|-|NoData|-|-
+LAES|-|-|-|-|-|-|NoData|-|-
+LAET|2026-11-04 10:20:00|2026-11-04 11:05:00||LAET||F39|None|Unterricht||
+LAEU|2026-11-04 15:15:00|2026-11-04 19:45:00||LACT,LABX,LABI,LAEU,LACF,LACI,LACE,LAAW|11a,8b,8a,7b1||irregular|Veranstaltung|Hinweis 4|
+LACC|2026-11-04 10:20:00|2026-11-04 11:05:00|D 2.12|LACC|6c1|F34|None|Unterricht||
+LAAX|2026-11-04 10:20:00|2026-11-04 11:05:00|C 3.11|LAAX|12b1|F77|None|Unterricht||
+LADB|2026-11-04 10:20:00|2026-11-04 11:05:00|D 3.08|LADB|10c|F73|None|Unterricht||
+LABC|2026-11-04 11:25:00|2026-11-04 12:10:00|B 1.18|LABC|8d|F25|None|Unterricht||
+LADH|2026-11-04 10:20:00|2026-11-04 11:05:00|C 3.15/D 3.16|LADH|9d1|F84|None|Unterricht||
+LAEV|-|-|-|-|-|-|NoData|-|-
+LABN|2026-11-04 11:25:00|2026-11-04 12:10:00|C 1.31|LABN|12c|F34|cancelled|Unterricht||
+LABS|2026-11-04 10:20:00|2026-11-04 11:05:00|B 2.10|LABS|5d,6a,6b,6c|F05|None|Unterricht||
+LAEW|-|-|-|-|-|-|NoData|-|-
+LAEX|-|-|-|-|-|-|NoData|-|-
+LABR|2026-11-04 10:20:00|2026-11-04 11:05:00|B 1.38|LABR|8d|F25|None|Unterricht||
+LABM|2026-11-04 10:20:00|2026-11-04 11:05:00|B 2.14|+LABM(LACJ)|7d1|F34|None|Unterricht||
+LABM|2026-11-04 10:20:00|2026-11-04 11:05:00|C 1.31|LABM|12c|F35|cancelled|Unterricht||
+LADC|2026-11-04 10:20:00|2026-11-04 11:05:00|A 3.09|LADC|9d,10d1|F01|None|Unterricht||
+LAAG|2026-11-04 10:20:00|2026-11-04 11:05:00|B 1.02|LAAG|5d,6a,6b,6c|F05|None|Unterricht||
+LAAJ|2026-11-04 11:25:00|2026-11-04 12:10:00|D 3.04|LAAJ|11b1|F02|None|Unterricht||
+LAAH|2026-11-04 10:20:00|2026-11-04 11:05:00|B 1.14|LAAH|9a|F10/F11|None|Unterricht||
+LACQ|2026-11-04 10:20:00|2026-11-04 11:05:00|+B 2.30(A 2.29)|LACQ|9c1|F54|None|Unterricht||
+LAAV|2026-11-04 10:20:00|2026-11-04 11:05:00|A 2.37|LAAV|7c1,7d,6a1|F56|None|Unterricht||
+LAAY|2026-11-04 10:20:00|2026-11-04 11:05:00|C 1.15|LAAY|9b|F19|None|Unterricht||
+LAEY|-|-|-|-|-|-|NoData|-|-
+LAEZ|-|-|-|-|-|-|NoData|-|-
+LAFA|-|-|-|-|-|-|NoData|-|-
+LACR|2026-11-04 10:20:00|2026-11-04 11:05:00|C 2.23|LACR|8d1|F48|None|Unterricht||
+LAAL|2026-11-04 10:20:00|2026-11-04 11:05:00|C 1.07|LAAL|7a|F09|None|Unterricht||
+LAFB|-|-|-|-|-|-|NoData|-|-
+LADF|2026-11-04 10:20:00|2026-11-04 11:05:00|B 3.10|LADF|12a1|F75|None|Unterricht||
+LADJ|2026-11-04 10:20:00|2026-11-04 11:05:00|B 3.14|LADJ|12d1|F01|None|Unterricht||
+LACL|2026-11-04 10:20:00|2026-11-04 11:05:00|D 2.24|LACL|9a1|F50|None|Unterricht||
+LAAI|2026-11-04 10:20:00|2026-11-04 11:05:00|A 2.05|LAAO,LAAO|5d1|F12|None|Unterricht||
+LACF|2026-11-04 10:20:00|2026-11-04 11:05:00|A 2.13|LACF|8b|F01|None|Unterricht||
+LACG|2026-11-04 10:20:00|2026-11-04 11:05:00|A 2.09|LACG|11d,12a,12b|F38|None|Unterricht||
+LADG|2026-11-04 10:20:00|2026-11-04 11:05:00|A 3.17|LADG|13a1|F90|None|Unterricht||
+LAAO|2026-11-04 10:20:00|2026-11-04 11:05:00|A 2.05|LAAO,LAAO|5d1|F12|None|Unterricht||
+LACI|2026-11-04 10:20:00|2026-11-04 11:05:00|A 3.05|LACI|7b1|F64|None|Unterricht||
+LACN|2026-11-04 07:45:00|2026-11-04 15:05:00|D 2.16|LACM,LACJ,LACN|8b1||irregular|Veranstaltung|Hinweis 3|
+LAFC|-|-|-|-|-|-|NoData|-|-
+LAFD|-|-|-|-|-|-|NoData|-|-
+LAAF|2026-11-04 10:20:00|2026-11-04 11:05:00|C 2.31|LAAF|11d,12a,12b|F37|None|Unterricht||
+LAFE|-|-|-|-|-|-|NoData|-|-
+LAFF|-|-|-|-|-|-|NoData|-|-
+LAAD|2026-11-04 10:20:00|2026-11-04 11:05:00|C 1.39|LAAD|13b,13c,10d,13d,5a1|F03|None|Unterricht||
+LAFG|-|-|-|-|-|-|NoData|-|-
+LAFH|-|-|-|-|-|-|NoData|-|-
+LAFI|-|-|-|-|-|-|NoData|-|-
+LAFJ|-|-|-|-|-|-|NoData|-|-
+LACU|2026-11-04 10:20:00|2026-11-04 11:05:00|B 2.38|LACU|7c1,7d,6a1|F56|None|Unterricht||
+LAAA|-|-|-|-|-|-|Gone|-|-
+LACE|2026-11-04 10:20:00|2026-11-04 11:05:00|D 2.08|LACE|7a1|F10/F11|None|Unterricht||
+LAFK|-|-|-|-|-|-|NoData|-|-
+LAFL|-|-|-|-|-|-|NoData|-|-
+LABA|2026-11-04 10:20:00|2026-11-04 11:05:00|A 1.17|LABA|10a,10b|F88|None|Unterricht||
+LABA|2026-11-04 10:20:00|2026-11-04 11:05:00|+A 1.17(D 1.16)|+LABA(LABB)|10a|F22|None|Unterricht||
+LABA|2026-11-04 10:20:00|2026-11-04 11:05:00|+A 1.17(D 1.16)|+LABA(LABB)|10b|F23|None|Unterricht||
+LABP|2026-11-04 11:25:00|2026-11-04 12:10:00|A 1.33|LABP|12a|F01|None|Unterricht||
+LACS|2026-11-04 10:20:00|2026-11-04 11:05:00|C 2.27|LACS|11d,12a,12b|F07|None|Unterricht||
+LAAR|2026-11-04 10:20:00|2026-11-04 11:05:00|B 1.10|LAAR|8a|F13|None|Unterricht||
+LACJ|2026-11-04 07:45:00|2026-11-04 15:05:00|D 2.16|LACM,LACJ,LACN|8b1||irregular|Veranstaltung|Hinweis 3|
+LABG|2026-11-04 10:20:00|2026-11-04 11:05:00|C 1.23|LABG|11b|F31|None|Unterricht||
+LABJ|2026-11-04 11:25:00|2026-11-04 12:10:00|C 1.39|LABJ|13b,13c,10d,13d,5a1|F05|None|Unterricht||
+LAFM|-|-|-|-|-|-|NoData|-|-
+LADL|2026-11-04 10:20:00|2026-11-04 11:05:00|B 3.18|LADL|13a1|F91|None|Unterricht||
+LABK|2026-11-04 11:25:00|2026-11-04 12:10:00|B 1.30|LABK|11d|F33|None|Unterricht||
+LAFN|-|-|-|-|-|-|NoData|-|-
+LAFO|-|-|-|-|-|-|NoData|-|-
+LAFP|-|-|-|-|-|-|NoData|-|-
+LABL|2026-11-04 07:45:00|2026-11-04 15:05:00|C 2.11|LACA,LABL|12c||irregular|Veranstaltung|Hinweis 3|
+LAAC|2026-11-04 10:20:00|2026-11-04 11:05:00|C 2.03|LAAC|5c1|F01|None|Unterricht||
+LACK|2026-11-04 13:35:00|2026-11-04 14:20:00|A 2.13|LACK|5a1|F40|cancelled|Unterricht||
+LADI|2026-11-04 10:20:00|2026-11-04 11:05:00|A 3.13|LADI|12c1|F80|None|Unterricht||
+LAAZ|2026-11-04 10:20:00|2026-11-04 11:05:00|D 3.20|LAAZ|10a1|F92|None|Unterricht||
+LABT|2026-11-04 10:20:00|2026-11-04 11:05:00|D 1.40|LABT|13b,13c,10d,13d,5a1|F03|None|Unterricht||
+LACW|2026-11-04 11:25:00|2026-11-04 12:10:00|B 3.02/C 3.03|LACW|10d1|F59|None|Unterricht||
+LAAW|2026-11-04 10:20:00|2026-11-04 11:05:00|B 1.22|LAAW|9c|F29|None|Unterricht||
+LAFQ|-|-|-|-|-|-|NoData|-|-
+LABF|2026-11-04 10:20:00|2026-11-04 11:05:00|C 3.07|LABF|10b1|F70|None|Unterricht||
+LAFR|-|-|-|-|-|-|NoData|-|-
+LAFS|2026-11-04 10:20:00|2026-11-04 11:05:00||LAFS||F39|None|Unterricht||
+LABY|2026-11-04 10:20:00|2026-11-04 11:05:00|D 2.20|LABY|8c1|F44|None|Unterricht||
+LABB|2026-11-04 10:20:00|2026-11-04 11:05:00|+A 1.17(D 1.16)|+LABA(LABB)|10a|F22|None|Unterricht||
+LABB|2026-11-04 10:20:00|2026-11-04 11:05:00|+A 1.17(D 1.16)|+LABA(LABB)|10b|F23|None|Unterricht||
+LADE|2026-11-04 10:20:00|2026-11-04 11:05:00|B 3.10|LADE|12a1|F75|None|Unterricht||
+LAFT|-|-|-|-|-|-|NoData|-|-
