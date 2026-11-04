@@ -327,6 +327,14 @@ describe('Live-Vorschau', () => {
     expect(await doc.text()).toContain('<h1>Aula</h1>');
   });
 
+  it('sagt der Vorschau, wie lange die Folie schon läuft', async () => {
+    const { app, token, loginAs, advance } = await setup();
+    await app.request(`/api/player/${token}/now-playing`, json('POST', { slideId: 's-text', version: 'v1', elapsedMs: 4_000 }));
+    advance(3_000);
+    const preview = await (await app.request('/api/preview/displays/d1/manifest', { headers: { cookie: await loginAs('viewer') } })).json();
+    expect(preview.nowPlaying.elapsedMs).toBe(7_000);
+  });
+
   it('meldet ein Display ohne Lebenszeichen als offline', async () => {
     const { app, token, loginAs, advance } = await setup();
     await app.request(`/api/player/${token}/now-playing`, json('POST', { slideId: 's-text', version: 'v1' }));

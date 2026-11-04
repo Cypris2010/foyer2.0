@@ -72,6 +72,8 @@ const userCreate = z.object({
 const nowPlayingBody = z.object({
   slideId: z.string().max(64).nullable(),
   version: z.string().max(64).nullable(),
+  // How long the slide has been on screen already (re-reports after reconnects).
+  elapsedMs: z.number().int().min(0).max(86_400_000).default(0),
 });
 const heartbeatBody = z.object({
   version: z.string().max(64).nullable(),
@@ -244,10 +246,12 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
     const manifest = await buildManifest(ctx, display, { preview: true });
     const online =
       displayState({ connected: events.connected(display.id) > 0, lastSeenAt: display.last_seen_at, now: ctx.now(), serverStartedAt: ctx.startedAt }) === 'online';
+    const current = online ? nowPlaying.get(display.id) : undefined;
     return c.json({
       ...manifest,
       display: { ...manifest.display, showProgress: false },
-      nowPlaying: online ? (nowPlaying.get(display.id) ?? null) : null,
+      // elapsedMs from the server's clock, so admin and display clocks may differ.
+      nowPlaying: current ? { ...current, elapsedMs: ctx.now() - current.at } : null,
     });
   });
 
@@ -604,10 +608,13 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
     const body = nowPlayingBody.safeParse(await c.req.json().catch(() => null));
     if (!body.success) return badRequest(c, body.error);
     const display = c.get('display');
-    const entry = { ...body.data, at: ctx.now() };
+    const { elapsedMs, ...slide } = body.data;
+    const now = ctx.now();
+    // at: when the slide appeared, so previews opened later can catch up.
+    const entry = { ...slide, at: now - elapsedMs };
     nowPlaying.set(display.id, entry);
-    db.prepare('UPDATE displays SET last_seen_at = ? WHERE id = ?').run(entry.at, display.id);
-    events.send(`watch:${display.id}`, 'now-playing', entry);
+    db.prepare('UPDATE displays SET last_seen_at = ? WHERE id = ?').run(now, display.id);
+    events.send(`watch:${display.id}`, 'now-playing', { ...entry, elapsedMs });
     return c.json({ ok: true });
   });
 
