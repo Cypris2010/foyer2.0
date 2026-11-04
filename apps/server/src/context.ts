@@ -2,12 +2,18 @@ import type { Db } from './db.ts';
 import type { Registry } from './registry.ts';
 import type { EventHub } from './events.ts';
 import type { MediaLibrary } from './media.ts';
+import type { LiveGateway } from './live.ts';
+import type { LiveServices } from '@foyer/slide-sdk';
 
 export interface AppContext {
   db: Db;
   registry: Registry;
   events: EventHub;
   media: MediaLibrary;
+  /** Live gateway (live.ts); absent in tests that do not need it. */
+  live?: LiveGateway;
+  /** Handed to slide-type servers (option lists, e.g. NDI sources). */
+  liveServices?: LiveServices;
   /** File name of the player bundle being served (player-build.ts); null when not built. */
   playerBuild: () => string | null;
   /** HMAC secret for signed content URLs, generated on first start. */

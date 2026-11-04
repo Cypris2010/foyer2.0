@@ -17,7 +17,7 @@ import { getCookie } from 'hono/cookie';
 import { clientIp, ipAllowed } from './net.ts';
 import { audit, transaction } from './db.ts';
 import { decrypt, encrypt, randomToken, safeEqual, sha256 } from './crypto.ts';
-import { buildManifest, buildSlideEntry, dataSignature, documentSignature, slideData, type DisplayRow, type SlideRow } from './manifest.ts';
+import { buildManifest, buildSlideEntry, dataSignature, documentSignature, liveSignature, slideData, type DisplayRow, type SlideRow } from './manifest.ts';
 import { parseConfig } from './registry.ts';
 import { hashPassword } from './crypto.ts';
 import { securityHeaders } from './headers.ts';
@@ -206,7 +206,9 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
       return c.json({ error: 'Ungültige Konfiguration' }, 400);
     }
     try {
-      return c.json(await provider(partial && typeof partial === 'object' ? partial : {}, { locale: ctx.locale, timeZone: ctx.timeZone }));
+      return c.json(
+        await provider(partial && typeof partial === 'object' ? partial : {}, { locale: ctx.locale, timeZone: ctx.timeZone, live: ctx.liveServices }),
+      );
     } catch (err) {
       // E.g. the data source is unreachable; the admin shows the message.
       return c.json({ error: (err as Error).message }, 502);
@@ -667,6 +669,40 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
       return c.json({ data: await slideData(ctx, row, displayId) });
     } catch (err) {
       return c.json({ error: `Daten nicht verfügbar: ${(err as Error).message}` }, 502);
+    }
+  });
+
+  // --- Live video (live slides) --------------------------------------------------
+  // WHEP signalling for the gateway (live.ts): signed URL from the manifest, then
+  // school networks (displays) or a session (admin previews), like slide data.
+  // The SDP offer goes to the local MediaMTX; the media flows directly over the
+  // WebRTC port.
+  app.post('/content/live/:id/:version/whep', async (c) => {
+    const slideId = c.req.param('id');
+    const version = Number(c.req.param('version'));
+    const displayId = c.req.query('d') ?? '';
+    if (!safeEqual(c.req.query('s') ?? '', liveSignature(ctx, slideId, version, displayId))) return c.text('Nicht erlaubt', 403);
+    const isPreview = displayId === 'preview' || displayId.startsWith('preview:');
+    const allowed = isPreview ? sessionUser(db, getCookie(c, SESSION_COOKIE)) : ipAllowed(c.get('clientIp'), ctx.playerNetworks);
+    if (!allowed) return c.text('Nicht erlaubt', 403);
+    const row = db.prepare('SELECT type, config_json, updated_at FROM slides WHERE id = ?').get(slideId) as
+      | Pick<SlideRow, 'type' | 'config_json' | 'updated_at'>
+      | undefined;
+    const entry = row && registry.get(row.type);
+    if (!row || row.updated_at !== version || !entry?.server.live) return c.text('Nicht gefunden', 404);
+    if (!c.req.header('content-type')?.startsWith('application/sdp')) return c.text('SDP erwartet', 415);
+    const offer = await c.req.text();
+    if (!offer || offer.length > 64_000) return c.text('Ungültiges Angebot', 400);
+    const input = entry.server.live(entry.definition.config.parse(JSON.parse(row.config_json)));
+    if (!input || !ctx.live) return c.text('Keine Live-Quelle', 404);
+    c.header('Cache-Control', 'no-store');
+    try {
+      const path = await ctx.live.ensure(input);
+      const answer = await ctx.live.whep(path, offer);
+      if (answer.status !== 201) return c.text(`Live-Quelle nicht verfügbar (${answer.status})`, 502);
+      return c.body(answer.sdp, 201, { 'Content-Type': 'application/sdp' });
+    } catch (err) {
+      return c.text(`Live-Quelle nicht verfügbar: ${(err as Error).message}`, 502);
     }
   });
 

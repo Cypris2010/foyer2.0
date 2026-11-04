@@ -8,6 +8,8 @@ import { loadTokenKey } from './keys.ts';
 import { join } from 'node:path';
 import { MediaLibrary } from './media.ts';
 import { playerBuildReader } from './player-build.ts';
+import { LiveGateway } from './live.ts';
+import { findNdiSources, ndiAvailable } from './ndi.ts';
 
 export function contentSecret(db: Db): string {
   let secret = getSetting(db, 'content_secret');
@@ -26,11 +28,30 @@ export async function createContext(db: Db = openDb(config.dataDir)): Promise<Ap
     maxBytes: config.mediaMaxMb * 1048576,
   });
   media.resume();
+  const live = new LiveGateway({
+    mediamtx: config.mediamtx,
+    ffmpeg: config.ffmpeg,
+    ffmpegNdi: config.ffmpegNdi,
+    dir: join(config.dataDir, 'live'),
+    mediaPort: config.liveMediaPort,
+    hosts: config.liveHosts,
+    ndiExtraIps: config.ndiExtraIps,
+    rtspPort: config.liveLocalPorts,
+    webrtcPort: config.liveLocalPorts + 1,
+    apiPort: config.liveLocalPorts + 2,
+  });
   return {
     db,
     registry: await loadRegistry(config.slideTypesDir),
     events: new EventHub(),
     media,
+    live,
+    liveServices: {
+      ndiSources: async () => {
+        if (!(await ndiAvailable(config.ffmpegNdi))) throw new Error('Der Server hat keinen NDI-Eingang (siehe README, „NDI als Live-Quelle“)');
+        return findNdiSources(config.ffmpegNdi, { extraIps: config.ndiExtraIps });
+      },
+    },
     playerBuild: playerBuildReader(config.playerDist),
     secret: contentSecret(db),
     tokenKey: loadTokenKey(config.dataDir),

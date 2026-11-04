@@ -434,7 +434,7 @@ Für den Start reicht „Ordner ins Repo, neu bauen“. Wenn Typen *ohne Rebuild
 
 **5. YouTube/Vimeo/Streams als eigener Typ „Online-Video“**
 - Klar gekennzeichnet: braucht Internet und ist nicht cachebar. Das Admin-UI empfiehlt bei eigenen Videos den Upload.
-- Livestreams (HLS) später als eigener Typ über `hls.js`.
+- Livestreams: umgesetzt als Folientyp `live` über WebRTC statt HLS. Die erweiterte Probe hat gezeigt, dass Airtame 2 WebRTC sauber abspielt (720p30: 0,7 % verworfene Bilder), MediaSource/HLS dagegen nicht (rund 37 % verworfen). Der Server wandelt jede Quelle (NDI, RTSP, SRT, RTMP, HLS, UDP) mit MediaMTX + ffmpeg in H.264 Baseline um, nur solange ein Display zuschaut; die Signalisierung (WHEP) läuft über Foyer mit signierter URL.
 
 **6. Ton**
 - Standard ist stumm. Der Player setzt `muted` auf jedem `<video>` explizit, weil Airtame Ton sonst immer ausgibt.

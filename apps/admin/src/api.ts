@@ -58,14 +58,16 @@ export interface JsonSchemaProperty {
   description?: string;
   maxLength?: number;
   format?: string;
-  widget?: 'textarea' | 'code' | 'select' | 'media' | 'options' | 'qr-art';
+  widget?: 'textarea' | 'code' | 'select' | 'media' | 'options' | 'suggest' | 'qr-art';
   language?: string;
   /** widget "media": which kind may be chosen. */
   accept?: 'image' | 'video';
-  /** widget "options": name of the slide type's server option list. */
+  /** widget "options" / "suggest": name of the slide type's server option list. */
   options?: string;
   /** enum: readable labels per value. */
   labels?: Record<string, string>;
+  /** Show the field only while other fields have these values. */
+  visibleIf?: Record<string, unknown>;
   /** type "array": item schema. */
   items?: JsonSchemaProperty;
 }

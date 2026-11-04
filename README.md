@@ -57,6 +57,47 @@ Konfiguration über Umgebungsvariablen (siehe `apps/server/src/config.ts`):
 | `FOYER_TIMEZONE` / `FOYER_LOCALE` | `Europe/Berlin` / `de-DE` | Zeitzone und Sprache |
 | `FOYER_MEDIA_MAX_MB` | `2048` | Größte erlaubte Upload-Datei |
 | `FOYER_FFMPEG` / `FOYER_FFPROBE` | `ffmpeg` / `ffprobe` | Pfade, falls nicht im `PATH` |
+| `FOYER_FFMPEG_NDI` | `/opt/ffmpeg-ndi/bin/ffmpeg`, falls vorhanden | Eigenes ffmpeg mit NDI-Eingang (siehe „Deployment“) |
+| `FOYER_MEDIAMTX` | `/opt/mediamtx/mediamtx`, falls vorhanden | Streaming-Server für Live-Folien (im Docker-Image enthalten) |
+| `FOYER_LIVE_PORT` | `8189` | WebRTC-Bild der Live-Folien (UDP, ersatzweise TCP); muss von den Displays erreichbar sein |
+| `FOYER_LIVE_HOSTS` | – | Zusätzliche Adressen, die den Displays fürs Bild genannt werden (z. B. die LAN-IP, wenn der Server hinter NAT läuft) |
+| `FOYER_NDI_EXTRA_IPS` | – | NDI-Sender in anderen Subnetzen (dorthin reicht mDNS nicht) |
+| `FOYER_LIVE_LOCAL_PORTS` | `18550` | Erster von drei Ports, die der Streaming-Server nur auf 127.0.0.1 belegt |
+
+### Live-Video
+
+Die Folie **Live-Video** zeigt eine NDI-Quelle oder eine Stream-Adresse (RTSP-Kamera, SRT, RTMP, HLS, UDP) mit unter einer Sekunde Verzögerung. Im Admin wählt man bei NDI die Quelle über „Quellen suchen“ aus der Liste der Quellen, die der Server sieht.
+
+- **Weg zum Display:** WebRTC. Die Geräte-Probe hat auf Airtame 2 gemessen, dass das sauber läuft (720p30: 0,7 % verworfene Bilder), HLS über MediaSource dagegen nicht. Standard ist deshalb **720p30**; 1080p30 geht, verliert auf Airtame aber ca. 5 % der Bilder.
+- **Auf dem Server** wandelt [MediaMTX](https://github.com/bluenviron/mediamtx) mit ffmpeg jede Quelle in H.264 Baseline (+ Opus bei „Mit Ton“) um. Mehrere Folien mit derselben Quelle teilen sich eine Umwandlung, und sie läuft nur, solange ein Display oder eine Vorschau zuschaut (danach noch 30 s).
+- **Zugriff:** Die Displays holen das Bild über eine signierte Adresse aus ihrem Manifest, nur aus den Schulnetzen; Admin-Vorschauen brauchen eine Anmeldung. Der Streaming-Server selbst ist nur über Foyer erreichbar, offen ist allein der Bild-Port `FOYER_LIVE_PORT`.
+- **Fällt die Quelle aus**, zeigt die Folie „Live-Bild nicht verfügbar · neuer Versuch …“ und verbindet neu, sobald die Quelle zurück ist (oder überspringt die Folie, je nach Einstellung).
+- **Firewall:** Displays → Server **8189 UDP** (oder TCP). Bei NDI zusätzlich Server ↔ NDI-Quellen (mDNS 5353 UDP, NDI 5960 ff. TCP).
+
+
+### Deployment (Docker)
+
+Ein Image mit Server, Admin und Player. `deploy/compose.yaml` startet es hinter einem TLS-Reverse-Proxy auf demselben Host:
+
+```bash
+docker compose -f deploy/compose.yaml up -d --build
+docker compose -f deploy/compose.yaml exec foyer node apps/server/src/cli.ts user:create vorname.nachname@schule.de "Vorname Nachname" admin
+```
+
+Die Daten (Datenbank, `token.key`, Medien) liegen im Volume `foyer-data` unter `/data`.
+
+**NDI als Live-Quelle (optional).** Das normale ffmpeg kann kein NDI mehr: Die ffmpeg-Entwickler haben den NDI-Baustein 2019 entfernt, und das NDI-SDK ist proprietär. Deshalb baut [`deploy/ffmpeg-ndi/build.sh`](deploy/ffmpeg-ndi/build.sh) ein **zweites** ffmpeg nach `/opt/ffmpeg-ndi`: ffmpeg 5.1 mit dem Community-Patch [lplassman/FFMPEG-NDI](https://github.com/lplassman/FFMPEG-NDI) (auf einen Commit festgelegt) und dem NDI-SDK 6. Die Mediathek nutzt weiter das normale ffmpeg; bricht der NDI-Build, ist nur NDI betroffen.
+
+```bash
+docker compose -f deploy/compose.yaml build --build-arg FOYER_NDI=1 --build-arg NDI_LICENSE=accept
+docker compose -f deploy/compose.yaml exec foyer node apps/server/src/cli.ts ndi:sources
+```
+
+- `NDI_LICENSE=accept` bestätigt die [NDI-SDK-Lizenz](https://docs.ndi.video/docs/sdk/licensing). Ohne das bricht der Build ab.
+- So ein Image enthält ein **nonfree-ffmpeg und das NDI-SDK**: auf dem eigenen Server nutzen, **nie in eine öffentliche Registry pushen** oder weitergeben. Andere Schulen bauen ihr Image selbst.
+- NDI findet Quellen per mDNS/Multicast über den **avahi-daemon des Hosts** (`apt install avahi-daemon`; die Compose-Datei bindet dafür `/run/dbus` ein). Der Container läuft deshalb mit `network_mode: host`, und der Server muss im selben Netz wie die NDI-Quellen stehen. Quellen in anderen Subnetzen trägt man in `FOYER_NDI_EXTRA_IPS` ein (testen mit `ndi:sources 10.48.20.5,10.48.20.9`); das geht auch ohne Avahi.
+- Ohne Docker auf Debian/Ubuntu: `sudo NDI_LICENSE=accept deploy/ffmpeg-ndi/build.sh`.
+- Beim Start meldet der Server `NDI-Eingang verfügbar`, wenn er das NDI-ffmpeg gefunden hat.
 
 ### Mediathek
 

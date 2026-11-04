@@ -44,6 +44,8 @@ export interface ManifestSlide {
   config: unknown;
   data: unknown;
   documentUrl?: string;
+  /** Live types (server.live): signed WHEP endpoint. */
+  liveUrl?: string;
   /** personalData types: `data` is null here and fetched from this URL instead. */
   dataUrl?: string;
   /** Changes with the data, so players fetch it again (and the manifest version changes). */
@@ -162,6 +164,16 @@ export function documentUrl(ctx: AppContext, slideId: string, version: number, d
   return `/content/slides/${encodeURIComponent(slideId)}/${version}?d=${encodeURIComponent(displayId)}&s=${sig}`;
 }
 
+export function liveSignature(ctx: AppContext, slideId: string, version: number, displayId: string): string {
+  return hmac(ctx.secret, `live:${slideId}:${version}:${displayId}`);
+}
+
+/** WHEP endpoint of a live slide (proxied to the gateway, see app.ts). */
+export function liveUrl(ctx: AppContext, slideId: string, version: number, displayId: string): string {
+  const sig = liveSignature(ctx, slideId, version, displayId);
+  return `/content/live/${encodeURIComponent(slideId)}/${version}/whep?d=${encodeURIComponent(displayId)}&s=${sig}`;
+}
+
 export async function buildSlideEntry(
   ctx: AppContext,
   slide: SlideRow,
@@ -219,6 +231,13 @@ export async function buildSlideEntry(
     result.data = null;
   }
   if (entry.server.document) result.documentUrl = documentUrl(ctx, slide.id, slide.updated_at, documentDisplayId);
+  if (entry.server.live && !result.error) {
+    const input = entry.server.live(parsed.data);
+    if (!input) result.error = 'Keine Live-Quelle gewählt';
+    else if (!ctx.live?.available) result.error = 'Live-Video ist auf dem Server nicht eingerichtet (MediaMTX fehlt)';
+    else if (input.kind === 'ndi' && !ctx.live.ndiAvailable) result.error = 'Der Server hat keinen NDI-Eingang';
+    else result.liveUrl = liveUrl(ctx, slide.id, slide.updated_at, documentDisplayId);
+  }
   return result;
 }
 
