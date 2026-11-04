@@ -31,5 +31,5 @@ export interface Manifest {
   /** Player bundle the server serves; when it differs from ours, reload (update.ts). */
   playerBuild?: string | null;
   /** Display previews only: the slide the real player reported last; null = offline. */
-  nowPlaying?: { slideId: string | null; version: string | null; at: number } | null;
+  nowPlaying?: { slideId: string | null; version: string | null; at: number; elapsedMs?: number } | null;
 }

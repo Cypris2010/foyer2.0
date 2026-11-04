@@ -8,6 +8,8 @@ import { mountBackground, type BackgroundControl } from './background.ts';
 const TRANSITION_MS = 1500;
 // Slides that end with their media get this much extra before the timer takes over.
 const END_GRACE_S = 3;
+// Live preview: seek media only when the display is clearly ahead.
+const CATCH_UP_MIN_S = 1;
 
 interface Mounted {
   key: string;
@@ -38,6 +40,7 @@ export class Ticker {
   private current: Mounted | null = null;
   private mounted = new Map<string, Mounted>();
   private timer: ReturnType<typeof setTimeout> | undefined;
+  private shownAt = 0;
   /** Live preview: slides change only when follow() is called, never by timer. */
   private following = false;
   private readonly stage: HTMLElement;
@@ -58,6 +61,11 @@ export class Ticker {
     return this.current?.slide.id ?? null;
   }
 
+  /** How long the current slide has been on screen. */
+  get elapsedMs(): number {
+    return this.current ? Math.round(performance.now() - this.shownAt) : 0;
+  }
+
   get displayName(): string {
     return this.manifest?.display.name ?? '';
   }
@@ -75,17 +83,25 @@ export class Ticker {
 
   /**
    * Shows the slide a real display reported (live preview). Returns false when
-   * the slide is unknown, so the caller can re-fetch the manifest.
+   * the slide is unknown, so the caller can re-fetch the manifest. elapsedMs:
+   * how long the display has shown it already; videos jump to the same point.
    */
-  follow(slideId: string): boolean {
+  follow(slideId: string, elapsedMs = 0): boolean {
+    // Just started following: what is on screen ran on our own clock so far.
+    const joining = !this.following;
     this.following = true;
     clearTimeout(this.timer);
     if (this.pending) this.apply(this.pending);
     const index = this.slides.findIndex((slide) => slide.id === slideId);
     if (index < 0) return false;
-    if (this.current?.slide.id === slideId) return true;
-    this.index = index;
-    return this.show(this.slides[index]);
+    if (this.current?.slide.id !== slideId) {
+      this.index = index;
+      if (!this.show(this.slides[index])) return false;
+    } else if (!joining) {
+      return true;
+    }
+    if (elapsedMs / 1000 >= CATCH_UP_MIN_S && this.current) seekVideos(this.current.el, elapsedMs / 1000);
+    return true;
   }
 
   /** Stops playback and forgets the manifest (display busy, released or not allowed). */
@@ -144,6 +160,7 @@ export class Ticker {
     entering.background.start();
     entering.instance.start?.();
     this.current = entering;
+    this.shownAt = performance.now();
     this.hooks.onSlideChange(slide);
 
     if (leaving) {
@@ -197,8 +214,9 @@ export class Ticker {
       timeZone: this.manifest.settings.timeZone,
       displayName: this.manifest.display.name,
       soundAllowed: this.manifest.display.soundAllowed === true,
+      // While following, only the real display decides when a slide ends.
       done: () => {
-        if (this.current?.key === key) this.advance();
+        if (this.current?.key === key && !this.following) this.advance();
       },
       reportError: (error) => this.hooks.onError(`${slide.title}: ${String((error as Error)?.message ?? error)}`),
     };
@@ -255,5 +273,22 @@ export class Ticker {
     void bar.offsetWidth; // restart the transition
     bar.style.transition = `transform ${seconds}s linear`;
     bar.style.transform = 'scaleX(1)';
+  }
+}
+
+/** Moves every video of a slide (content and background) to the given time. */
+function seekVideos(el: HTMLElement, seconds: number) {
+  for (const video of Array.from(el.querySelectorAll('video'))) {
+    const seek = () => {
+      const length = video.duration;
+      const target = !Number.isFinite(length) ? seconds : video.loop ? seconds % length : Math.min(seconds, length - 0.1);
+      try {
+        video.currentTime = target;
+      } catch {
+        // not seekable; keeps playing from where it is
+      }
+    };
+    if (video.readyState >= 1) seek();
+    else video.addEventListener('loadedmetadata', seek, { once: true });
   }
 }

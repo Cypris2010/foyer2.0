@@ -41,16 +41,19 @@ if (!endpoints) {
   let pausedUntil = 0;
   let source: EventSource | null = null;
 
+  // Lets the admin's live preview follow this display.
+  const reportNowPlaying = () => {
+    if (!endpoints.nowPlaying || !active) return;
+    postJson(endpoints.nowPlaying, { slideId: ticker.currentSlideId, version: ticker.version, elapsedMs: ticker.elapsedMs }).catch(() => undefined);
+  };
+
   const update = createUpdateCheck(recordError);
   const ticker = new Ticker(stage, progress, {
     onError: recordError,
-    onSlideChange: (slide) => {
+    onSlideChange: () => {
       // New Foyer version on the server: reload between slides, never mid-slide.
       if (update.due) return location.reload();
-      // Lets the admin's live preview follow this display.
-      if (endpoints.nowPlaying && active) {
-        postJson(endpoints.nowPlaying, { slideId: slide?.id ?? null, version: ticker.version }).catch(() => undefined);
-      }
+      reportNowPlaying();
     },
   });
 
@@ -68,7 +71,7 @@ if (!endpoints) {
   // Live preview: mirror the real display, or play the plan while it is offline.
   const followDisplay = (manifest: Manifest) => {
     const slideId = manifest.nowPlaying?.slideId;
-    if (slideId && ticker.follow(slideId)) {
+    if (slideId && ticker.follow(slideId, manifest.nowPlaying?.elapsedMs)) {
       badge.hidden = true;
     } else if (!manifest.nowPlaying) {
       ticker.autonomous();
@@ -87,6 +90,8 @@ if (!endpoints) {
       const wasActive = active;
       active = true;
       overlay.hidden = true;
+      // Started from the cache, the first slide went unreported.
+      if (!wasActive && ticker.currentSlideId) reportNowPlaying();
       storeManifest(endpoints.cacheKey, manifest);
       update.check(manifest.playerBuild);
       // Nothing on screen: no boundary to wait for.
@@ -121,6 +126,8 @@ if (!endpoints) {
     // Reconnects are automatic; refresh afterwards in case events were missed.
     source.addEventListener('hello', () => void refresh());
     if (endpoints.mode === 'display') {
+      // Connected again (e.g. after a server restart, which forgets what we show).
+      source.addEventListener('hello', reportNowPlaying);
       source.addEventListener('reload', () => location.reload());
       source.addEventListener('identify', () => showOverlay(ticker.displayName || 'Foyer', 10_000));
       source.addEventListener('released', () => {
@@ -129,9 +136,9 @@ if (!endpoints) {
       });
     } else if (endpoints.mode === 'live') {
       source.addEventListener('now-playing', (event) => {
-        const { slideId } = JSON.parse((event as MessageEvent).data);
+        const { slideId, elapsedMs } = JSON.parse((event as MessageEvent).data);
         // Unknown slide: the display already runs a newer manifest.
-        if (slideId && ticker.follow(slideId)) badge.hidden = true;
+        if (slideId && ticker.follow(slideId, elapsedMs)) badge.hidden = true;
         else void refresh();
       });
     }
