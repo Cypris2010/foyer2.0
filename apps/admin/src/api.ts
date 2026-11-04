@@ -58,7 +58,7 @@ export interface JsonSchemaProperty {
   description?: string;
   maxLength?: number;
   format?: string;
-  widget?: 'textarea' | 'code' | 'select' | 'media';
+  widget?: 'textarea' | 'code' | 'select' | 'media' | 'qr-art';
   language?: string;
   /** widget "media": which kind may be chosen. */
   accept?: 'image' | 'video';

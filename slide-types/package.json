@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@foyer/qr-art": "*",
     "@foyer/slide-sdk": "*",
     "qrcode": "^1.5.4",
     "zod": "^4.1.0"

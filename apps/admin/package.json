@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@event-calendar/core": "5.17.2",
+    "@foyer/qr-art": "*",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },

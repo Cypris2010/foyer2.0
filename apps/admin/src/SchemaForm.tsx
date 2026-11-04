@@ -1,7 +1,13 @@
 // Renders an edit form from a slide type's JSON schema (generated from its Zod
 // config). New slide types get a working form without admin code changes.
+import { lazy, Suspense } from 'react';
+import type { Ecc } from '@foyer/qr-art';
 import type { JsonSchemaProperty, User } from './api.ts';
 import { MediaField } from './Media.tsx';
+import type { QrArtValue } from './QrArtField.tsx';
+
+// Loaded on demand: it brings the QR solver and decoder along.
+const QrArtField = lazy(() => import('./QrArtField.tsx').then((m) => ({ default: m.QrArtField })));
 
 interface Props {
   schema: { properties: Record<string, JsonSchemaProperty> };
@@ -35,6 +41,22 @@ export function SchemaForm({ schema, value, onChange, disabled, user, onError = 
         const label = prop.description ?? name;
         const current = value[name] ?? prop.default ?? '';
         const id = `field-${name}`;
+        if (prop.widget === 'qr-art') {
+          return (
+            <div key={name} className="field">
+              <span>{label}</span>
+              <Suspense fallback={<p className="muted">QR-Editor wird geladen …</p>}>
+                <QrArtField
+                  value={{ ...(prop.default as QrArtValue), ...(current as Partial<QrArtValue>) }}
+                  url={typeof value.qrUrl === 'string' ? value.qrUrl : ''}
+                  ecc={(value.qrEcc as Ecc | undefined) ?? 'M'}
+                  disabled={disabled}
+                  onChange={(v) => set(name, v)}
+                />
+              </Suspense>
+            </div>
+          );
+        }
         switch (kind(prop)) {
           case 'boolean':
             return (

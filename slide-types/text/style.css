@@ -21,6 +21,8 @@
   background: #fff;
   border-radius: 1vmin;
 }
+/* Codes with a motif have more, smaller modules. */
+.foyer-text__qr--art { width: 34vmin; height: 34vmin; }
 .foyer-text__qr svg { display: block; width: 100%; height: 100%; }
 @media (max-aspect-ratio: 1/1) {
   .foyer-text { flex-direction: column; justify-content: center; text-align: center; }

@@ -26,7 +26,7 @@ export default defineRenderer<TextConfig, TextData>((root, { config, data, ctx }
 
   if (data?.qrSvg) {
     const qr = document.createElement('div');
-    qr.className = 'foyer-text__qr';
+    qr.className = data.qrArt ? 'foyer-text__qr foyer-text__qr--art' : 'foyer-text__qr';
     // Server-generated SVG from the qrcode library, not user HTML.
     qr.innerHTML = data.qrSvg;
     container.appendChild(qr);
