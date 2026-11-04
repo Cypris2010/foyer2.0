@@ -25,6 +25,7 @@ import { displayState } from './status.ts';
 import { LeaseTable } from './leases.ts';
 import { registerScheduleRoutes } from './schedule-routes.ts';
 import { registerMediaRoutes } from './media-routes.ts';
+import { registerIntegrationRoutes, slideServerContext } from './integrations.ts';
 import { backgroundSchema, checkBackground, mediaFields } from './background.ts';
 
 type Env = AuthEnv;
@@ -206,7 +207,7 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
       return c.json({ error: 'Ungültige Konfiguration' }, 400);
     }
     try {
-      return c.json(await provider(partial && typeof partial === 'object' ? partial : {}, { locale: ctx.locale, timeZone: ctx.timeZone }));
+      return c.json(await provider(partial && typeof partial === 'object' ? partial : {}, slideServerContext(ctx)));
     } catch (err) {
       // E.g. the data source is unreachable; the admin shows the message.
       return c.json({ error: (err as Error).message }, 502);
@@ -529,6 +530,7 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
 
   registerScheduleRoutes(admin, ctx, editor);
   registerMediaRoutes(admin, ctx, editor);
+  registerIntegrationRoutes(admin, ctx, adminOnly);
 
   // Preview manifest for one slide (admin preview player at /p/preview/<slideId>).
   admin.get('/preview/slides/:id/manifest', async (c) => {

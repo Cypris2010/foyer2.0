@@ -7,7 +7,7 @@ import textType from '../slide-types/text/index.ts';
 import textServer from '../slide-types/text/server.ts';
 
 const URL = 'https://github.com/Cypris2010/foyer2.0';
-const ctx = { locale: 'de-DE', timeZone: 'Europe/Berlin' };
+const ctx = { locale: 'de-DE', timeZone: 'Europe/Berlin', untisApi: null };
 
 describe('QR-Encoder', () => {
   it('erzeugt ohne Motiv in allen Versionen und Stufen dieselben Codes wie die qrcode-Bibliothek', () => {
