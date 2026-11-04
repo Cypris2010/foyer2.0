@@ -185,7 +185,7 @@ export function Slides({ user, onError }: { user: User; onError: (e: unknown) =>
             </div>
             <h3>{type.name}</h3>
             {!editable && <p className="muted">Dieser Folientyp kann nur von Admins bearbeitet werden.</p>}
-            <SchemaForm schema={type.schema} value={draft.config} disabled={!editable} user={user} onError={onError} onChange={(config) => setDraft({ ...draft, config })} />
+            <SchemaForm schema={type.schema} typeId={type.id} value={draft.config} disabled={!editable} user={user} onError={onError} onChange={(config) => setDraft({ ...draft, config })} />
             {type.backgrounds && type.backgrounds.length > 0 && (
               <>
                 <h3>Hintergrund</h3>

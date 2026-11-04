@@ -67,13 +67,27 @@ Bilder und Videos lädt man im Admin unter **Medien** hoch und nutzt sie als Fol
 
 Die Dateien liegen unter `FOYER_DATA_DIR/media` (`originals/` für die Uploads, `files/` für die umgewandelten Dateien mit Inhalts-Hash im Namen). Ausgeliefert werden sie unter `/media/…` nur ins Schulnetz (`FOYER_PLAYER_NETWORKS`) und an angemeldete Benutzer. Dateien, die eine Folie noch nutzt, lassen sich nicht löschen.
 
+### WebUntis: Raumanzeige und Lehrkräfte-Dashboard
+
+Die beiden Folien sind 1:1 aus wp-foyer übernommen (gleiche Darstellung, Beschriftungen und Optionen). Neu ist, wo die Daten herkommen:
+
+- Die **Datenquelle** (Adresse des Untis-TXT-Exports, `raeume_ganzer_tag.txt` bzw. `lehrer.txt`) wird pro Folie eingetragen; im Code steht keine Adresse.
+- Der **Server** holt den Export (geteilter Cache, Timeout, höchstens 5 MB), filtert ihn auf die gewählten Räume bzw. Lehrkräfte und schickt den Playern nur diese Zeilen. Die Daten liegen nur im Arbeitsspeicher, nie in der Datenbank oder im Log. Auch das Manifest enthält sie nicht (der Player speichert es für den Kaltstart): Der Player holt die Zeilen über eine signierte URL (`/content/data/…`, nur Schulnetz bzw. Admin-Sitzung) und hält sie nur im Speicher. Folientypen markieren das mit `personalData: true`. Fällt die Quelle aus, zeigen die Folien bis zu eine Stunde lang den letzten Stand.
+- Ändern sich die Daten, merkt das der Server (Takt 15 s, je nach Folie alle 30–120 s neu geholt) und meldet es den Displays. Die laufende Folie bekommt die neuen Zeilen über `update()`, ohne neu aufgebaut zu werden.
+- Räume und Lehrkräfte wählt man im Admin aus einer Liste, die aus der eingetragenen Quelle kommt.
+
+Die Quelle ist austauschbar ([`slide-types/_untis/source.ts`](slide-types/_untis/source.ts)): Eine spätere WebUntis-API-Quelle liefert dieselben Zeilen, die Folien bleiben unverändert.
+
 Tests:
 
 ```bash
-npm test                                         # Unit- und API-Tests (Sicherheitsregeln, Manifest, HTML-Folie)
+npm test                                         # Unit- und API-Tests (Sicherheitsregeln, Manifest, HTML-Folie, Untis)
 npm run typecheck
 node tests/e2e/player-smoke.ts <player-url>      # Player in echtem Chrome (braucht Google Chrome)
+node tests/e2e/untis-compare.ts <foyer-url> <wp-foyer-checkout> <out-dir>   # Untis-Folien alt gegen neu
 ```
+
+Die Testdaten in `tests/fixtures/untis/` sind anonymisierte echte Exporte: Namen, Kürzel, Klassen und Texte sind ersetzt, Zeiten und Status unverändert.
 
 ### Neuen Folientyp anlegen
 

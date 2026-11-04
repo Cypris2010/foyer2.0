@@ -14,6 +14,9 @@ export interface ManifestSlide {
   config: unknown;
   data: unknown;
   documentUrl?: string;
+  /** personalData types: `data` comes from here (data.ts), not from the manifest. */
+  dataUrl?: string;
+  dataVersion?: string;
   background: Background | null;
   media: Record<string, MediaInfo>;
   playsToEnd: boolean;

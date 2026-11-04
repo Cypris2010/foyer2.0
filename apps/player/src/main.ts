@@ -1,6 +1,7 @@
 import './styles.css';
 import { clearCachedManifest, endpointsFromPath, fetchManifest, HttpError, loadCachedManifest, postJson, storeManifest } from './api.ts';
 import { Ticker } from './ticker.ts';
+import { withSlideData, withoutSlideData } from './data.ts';
 import { createUpdateCheck } from './update.ts';
 import type { Manifest } from './types.ts';
 
@@ -58,7 +59,7 @@ if (!endpoints) {
   });
 
   const cached = loadCachedManifest(endpoints.cacheKey);
-  if (cached) ticker.setManifest(cached);
+  if (cached) ticker.setManifest(withoutSlideData(cached));
 
   const block = (message: string) => {
     active = false;
@@ -84,15 +85,18 @@ if (!endpoints) {
   const refresh = async () => {
     if (Date.now() < pausedUntil) return;
     try {
-      const manifest = await fetchManifest(endpoints.manifest);
+      const fetched = await fetchManifest(endpoints.manifest);
       // Released while this request was in flight: keep the notice, drop the answer.
+      if (Date.now() < pausedUntil) return;
+      // Cached as delivered: without personal data.
+      storeManifest(endpoints.cacheKey, fetched);
+      const manifest = await withSlideData(fetched);
       if (Date.now() < pausedUntil) return;
       const wasActive = active;
       active = true;
       overlay.hidden = true;
       // Started from the cache, the first slide went unreported.
       if (!wasActive && ticker.currentSlideId) reportNowPlaying();
-      storeManifest(endpoints.cacheKey, manifest);
       update.check(manifest.playerBuild);
       // Nothing on screen: no boundary to wait for.
       if (update.due && !ticker.currentSlideId) return location.reload();

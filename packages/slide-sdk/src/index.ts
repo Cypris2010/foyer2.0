@@ -27,6 +27,12 @@ export interface SlideTypeDefinition<S extends z.ZodType = z.ZodType> {
   durationFromMedia?: string;
   /** Keep mounted (hidden) between appearances instead of re-creating it. */
   keepAlive?: boolean;
+  /**
+   * `data` contains personal data (e.g. Untis): it is not put into the manifest
+   * (which players cache offline) but fetched separately and only kept in memory
+   * (KONZEPT 3.1).
+   */
+  personalData?: boolean;
   /** Minimum role to create or edit slides of this type. */
   editRole?: Role;
 }

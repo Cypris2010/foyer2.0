@@ -1,8 +1,8 @@
 // Renders an edit form from a slide type's JSON schema (generated from its Zod
 // config). New slide types get a working form without admin code changes.
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import type { Ecc } from '@foyer/qr-art';
-import type { JsonSchemaProperty, User } from './api.ts';
+import { api, type JsonSchemaProperty, type Option, type User } from './api.ts';
 import { MediaField } from './Media.tsx';
 import type { QrArtValue } from './QrArtField.tsx';
 
@@ -17,6 +17,8 @@ interface Props {
   /** Needed by media fields (picker with upload). */
   user?: User;
   onError?: (e: unknown) => void;
+  /** Slide type id; option lists (widget "options") are loaded from its server. */
+  typeId?: string;
 }
 
 function kind(prop: JsonSchemaProperty): string {
@@ -33,7 +35,7 @@ export function defaultsFor(schema: Props['schema']): Record<string, unknown> {
   return out;
 }
 
-export function SchemaForm({ schema, value, onChange, disabled, user, onError = () => undefined }: Props) {
+export function SchemaForm({ schema, value, onChange, disabled, user, onError = () => undefined, typeId }: Props) {
   const set = (name: string, v: unknown) => onChange({ ...value, [name]: v });
   return (
     <div className="form">
@@ -57,6 +59,22 @@ export function SchemaForm({ schema, value, onChange, disabled, user, onError = 
             </div>
           );
         }
+        if (prop.widget === 'options' && prop.options && typeId) {
+          return (
+            <div key={name} className="field">
+              <span>{label}</span>
+              <OptionsField
+                typeId={typeId}
+                list={prop.options}
+                config={value}
+                field={name}
+                value={Array.isArray(current) ? (current as string[]) : []}
+                disabled={disabled}
+                onChange={(v) => set(name, v)}
+              />
+            </div>
+          );
+        }
         switch (kind(prop)) {
           case 'boolean':
             return (
@@ -71,7 +89,7 @@ export function SchemaForm({ schema, value, onChange, disabled, user, onError = 
                 <span>{label}</span>
                 <select id={id} value={String(current)} disabled={disabled} onChange={(e) => set(name, e.target.value)}>
                   {prop.enum!.map((option) => (
-                    <option key={option} value={option}>{option}</option>
+                    <option key={option} value={option}>{prop.labels?.[option] ?? option}</option>
                   ))}
                 </select>
               </label>
@@ -125,6 +143,88 @@ export function SchemaForm({ schema, value, onChange, disabled, user, onError = 
             );
         }
       })}
+    </div>
+  );
+}
+
+interface OptionsFieldProps {
+  typeId: string;
+  list: string;
+  config: Record<string, unknown>;
+  field: string;
+  value: string[];
+  disabled?: boolean;
+  onChange: (value: string[]) => void;
+}
+
+/**
+ * Multiple choice from a server option list (e.g. the rooms of the Untis export).
+ * The list depends on the other config fields (e.g. the source URL), so it is
+ * reloaded when they change. Chosen values the list no longer has stay chosen.
+ */
+function OptionsField({ typeId, list, config, field, value, disabled, onChange }: OptionsFieldProps) {
+  const [options, setOptions] = useState<Option[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState('');
+  const { [field]: _own, ...rest } = config;
+  const dependsOn = JSON.stringify(rest);
+
+  useEffect(() => {
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      api
+        .get<Option[]>(`/slide-types/${encodeURIComponent(typeId)}/options/${encodeURIComponent(list)}?config=${encodeURIComponent(dependsOn)}`)
+        .then((result) => {
+          if (cancelled) return;
+          setOptions(result);
+          setError(null);
+        })
+        .catch((e) => {
+          if (cancelled) return;
+          setOptions(null);
+          setError((e as Error).message);
+        });
+    }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [typeId, list, dependsOn]);
+
+  const known = new Set((options ?? []).map((o) => o.value));
+  const all = [...(options ?? []), ...value.filter((v) => !known.has(v)).map((v) => ({ value: v, label: `${v} (nicht in der Datenquelle)` }))];
+  const needle = filter.trim().toLowerCase();
+  const shown = needle ? all.filter((o) => o.label.toLowerCase().includes(needle)) : all;
+  const chosen = new Set(value);
+  // Keep the order of the list, as the old select box did.
+  const toggle = (v: string, on: boolean) => {
+    const next = new Set(chosen);
+    if (on) next.add(v);
+    else next.delete(v);
+    onChange(all.map((o) => o.value).filter((x) => next.has(x)));
+  };
+
+  return (
+    <div className="options-field">
+      <div className="options-field__bar">
+        <input type="search" placeholder="Filtern …" value={filter} onChange={(e) => setFilter(e.target.value)} />
+        <span className="muted">{value.length} gewählt</span>
+        {value.length > 0 && !disabled && (
+          <button type="button" onClick={() => onChange([])}>
+            Auswahl leeren
+          </button>
+        )}
+      </div>
+      {error && <p className="error">Liste konnte nicht geladen werden: {error}</p>}
+      {!options && !error && <p className="muted">Lade Liste …</p>}
+      <div className="options-field__list">
+        {shown.map((o) => (
+          <label key={o.value} className="field--check">
+            <input type="checkbox" checked={chosen.has(o.value)} disabled={disabled} onChange={(e) => toggle(o.value, e.target.checked)} />
+            {o.label}
+          </label>
+        ))}
+      </div>
     </div>
   );
 }

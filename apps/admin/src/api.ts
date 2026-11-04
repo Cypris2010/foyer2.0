@@ -58,10 +58,21 @@ export interface JsonSchemaProperty {
   description?: string;
   maxLength?: number;
   format?: string;
-  widget?: 'textarea' | 'code' | 'select' | 'media' | 'qr-art';
+  widget?: 'textarea' | 'code' | 'select' | 'media' | 'options' | 'qr-art';
   language?: string;
   /** widget "media": which kind may be chosen. */
   accept?: 'image' | 'video';
+  /** widget "options": name of the slide type's server option list. */
+  options?: string;
+  /** enum: readable labels per value. */
+  labels?: Record<string, string>;
+  /** type "array": item schema. */
+  items?: JsonSchemaProperty;
+}
+
+export interface Option {
+  value: string;
+  label: string;
 }
 
 export interface SlideType {

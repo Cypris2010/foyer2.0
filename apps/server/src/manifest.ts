@@ -25,7 +25,7 @@ interface ChannelRow {
   default_duration: number;
 }
 
-interface SlideRow {
+export interface SlideRow {
   id: string;
   title: string;
   type: string;
@@ -44,6 +44,10 @@ export interface ManifestSlide {
   config: unknown;
   data: unknown;
   documentUrl?: string;
+  /** personalData types: `data` is null here and fetched from this URL instead. */
+  dataUrl?: string;
+  /** Changes with the data, so players fetch it again (and the manifest version changes). */
+  dataVersion?: string;
   background: ManifestBackground | null;
   /** Files of the config's media fields, keyed by media id. */
   media: Record<string, MediaInfo>;
@@ -83,6 +87,70 @@ async function resolveData(ctx: AppContext, slide: SlideRow, config: unknown, di
   const value = await entry.server.data(config, { displayId, locale: ctx.locale, timeZone: ctx.timeZone });
   dataCache.set(key, { value, expires: now + ttlSeconds * 1000 });
   return value;
+}
+
+/**
+ * Re-resolves the data of published slides whose type refreshes (refreshSeconds)
+ * once it expired. True when any slide's data changed: players then fetch the
+ * manifest again and hand the new data to the running slide (update()).
+ */
+export async function refreshSlideData(ctx: AppContext): Promise<boolean> {
+  const types = [...ctx.registry].filter(([, entry]) => entry.server.data && entry.server.refreshSeconds).map(([id]) => id);
+  if (!types.length) return false;
+  const rows = ctx.db
+    .prepare(`SELECT * FROM slides WHERE published = 1 AND type IN (${types.map(() => '?').join(', ')})`)
+    .all(...types) as unknown as SlideRow[];
+  let changed = false;
+  for (const slide of rows) {
+    const key = `${slide.id}:${slide.updated_at}`;
+    const cached = dataCache.get(key);
+    // Not shown anywhere yet, or still fresh: nothing to push.
+    if (!cached || cached.expires > ctx.now()) continue;
+    const parsed = ctx.registry.get(slide.type)!.definition.config.safeParse(JSON.parse(slide.config_json));
+    if (!parsed.success) continue;
+    const before = JSON.stringify(cached.value);
+    try {
+      dataCache.delete(key);
+      const value = await resolveData(ctx, slide, parsed.data, '');
+      if (JSON.stringify(value) !== before) changed = true;
+    } catch {
+      // The next manifest request reports the error on the slide.
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+/** Runs refreshSlideData every `intervalMs` and notifies players of changes. */
+export function startDataRefresh(ctx: AppContext, intervalMs = 15_000): () => void {
+  let running = false;
+  const timer = setInterval(async () => {
+    if (running) return;
+    running = true;
+    try {
+      if (await refreshSlideData(ctx)) ctx.events.broadcast('manifest-changed');
+    } finally {
+      running = false;
+    }
+  }, intervalMs);
+  timer.unref?.();
+  return () => clearInterval(timer);
+}
+
+/** Data of a slide as its renderer gets it (cached, see resolveData). */
+export async function slideData(ctx: AppContext, slide: SlideRow, displayId: string): Promise<unknown> {
+  const entry = ctx.registry.get(slide.type);
+  if (!entry) return null;
+  return resolveData(ctx, slide, entry.definition.config.parse(JSON.parse(slide.config_json)), displayId);
+}
+
+export function dataSignature(ctx: AppContext, slideId: string, version: number, displayId: string): string {
+  return hmac(ctx.secret, `data:${slideId}:${version}:${displayId}`);
+}
+
+export function dataUrl(ctx: AppContext, slideId: string, version: number, displayId: string): string {
+  const sig = dataSignature(ctx, slideId, version, displayId);
+  return `/content/data/${encodeURIComponent(slideId)}/${version}?d=${encodeURIComponent(displayId)}&s=${sig}`;
 }
 
 export function documentSignature(ctx: AppContext, slideId: string, version: number, displayId: string): string {
@@ -143,6 +211,12 @@ export async function buildSlideEntry(
     result.data = await resolveData(ctx, slide, parsed.data, displayId);
   } catch (err) {
     result.error = `Daten nicht verfügbar: ${(err as Error).message}`;
+  }
+  if (entry.definition.personalData && !result.error) {
+    // Only a keyed hash of the data goes into the manifest, never the data.
+    result.dataVersion = hmac(ctx.secret, JSON.stringify(result.data ?? null)).slice(0, 16);
+    result.dataUrl = dataUrl(ctx, slide.id, slide.updated_at, documentDisplayId);
+    result.data = null;
   }
   if (entry.server.document) result.documentUrl = documentUrl(ctx, slide.id, slide.updated_at, documentDisplayId);
   return result;
