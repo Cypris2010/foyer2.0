@@ -3,8 +3,9 @@ import { api, ApiError, type User } from './api.ts';
 import { Displays } from './Displays.tsx';
 import { Channels } from './Channels.tsx';
 import { Slides } from './Slides.tsx';
+import { CalendarPage } from './CalendarPage.tsx';
 
-const pages = { displays: 'Displays', channels: 'Channels', slides: 'Folien' } as const;
+const pages = { displays: 'Displays', calendar: 'Kalender', channels: 'Channels', slides: 'Folien' } as const;
 type Page = keyof typeof pages;
 
 function currentPage(): Page {
@@ -85,6 +86,7 @@ export function App() {
       )}
       <main>
         {page === 'displays' && <Displays user={user} onError={onError} />}
+        {page === 'calendar' && <CalendarPage user={user} onError={onError} />}
         {page === 'channels' && <Channels user={user} onError={onError} />}
         {page === 'slides' && <Slides user={user} onError={onError} />}
       </main>

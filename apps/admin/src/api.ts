@@ -30,7 +30,7 @@ export interface Channel {
   isFavorite: boolean;
   published: boolean;
   slideCount?: number;
-  slides?: Array<{ slideId: string; windowStart: number | null; windowEnd: number | null }>;
+  slides?: Array<{ slideId: string }>;
 }
 
 export interface Slide {
@@ -97,3 +97,29 @@ export const api = {
 
 export const roleRank: Record<Role, number> = { viewer: 0, editor: 1, admin: 2 };
 export const can = (user: User, role: Role) => roleRank[user.role] >= roleRank[role];
+
+/** One calendar entry (single, open-ended or series). Times are school wall time "YYYY-MM-DDTHH:mm". */
+export interface Schedule {
+  id: string;
+  scope: 'display' | 'channel';
+  channelId: string | null;
+  contentKind: 'channel' | 'slide';
+  contentId: string;
+  title: string;
+  displayIds: string[];
+  start: string;
+  end: string | null;
+  rrule: string | null;
+  exclusive: boolean;
+}
+
+/** A concrete occurrence of a schedule, as listed for the calendar view. */
+export interface ScheduleOccurrence extends Schedule {
+  occId: string;
+  occStart: string;
+  occEnd: string | null;
+  /** Overlaps another channel on a shared display: both are coupled. */
+  overlaps: boolean;
+}
+
+export type ScheduleInput = Omit<Schedule, 'id' | 'title'>;

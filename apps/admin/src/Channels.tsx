@@ -1,46 +1,50 @@
 import { useEffect, useState } from 'react';
 import { api, can, type Channel, type Slide, type User } from './api.ts';
-
-type Entry = NonNullable<Channel['slides']>[number];
-
-const toLocalInput = (ts: number | null) => (ts ? new Date(ts - new Date(ts).getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '');
-const fromLocalInput = (value: string) => (value ? new Date(value).getTime() : null);
+import { ScheduleCalendar } from './ScheduleCalendar.tsx';
 
 function ChannelEditor({ channelId, slides, user, onError, onSaved }: { channelId: string; slides: Slide[]; user: User; onError: (e: unknown) => void; onSaved: () => void }) {
   const [channel, setChannel] = useState<Channel | null>(null);
-  const [entries, setEntries] = useState<Entry[]>([]);
-  const [add, setAdd] = useState('');
+  const [order, setOrder] = useState<string[]>([]);
+  const [saved, setSaved] = useState(false);
   const editable = can(user, 'editor');
 
-  useEffect(() => {
+  const reload = () =>
     api
       .get<Channel>(`/channels/${channelId}`)
       .then((c) => {
         setChannel(c);
-        setEntries(c.slides ?? []);
+        setOrder((c.slides ?? []).map((s) => s.slideId));
       })
       .catch(onError);
-  }, [channelId]);
+  useEffect(() => void reload(), [channelId]);
 
   if (!channel) return null;
   const title = (id: string) => slides.find((s) => s.id === id)?.title ?? '(gelöscht)';
   const move = (i: number, delta: number) => {
-    const next = [...entries];
+    const next = [...order];
     const [item] = next.splice(i, 1);
     next.splice(i + delta, 0, item);
-    setEntries(next);
+    setOrder(next);
   };
-  const update = (i: number, patch: Partial<Entry>) => setEntries(entries.map((e, idx) => (idx === i ? { ...e, ...patch } : e)));
 
-  const save = async () => {
+  const save = async (nextOrder = order) => {
     try {
       const { slides: _omit, slideCount: _count, id: _id, ...settings } = channel;
       await api.put(`/channels/${channel.id}`, settings);
-      await api.put(`/channels/${channel.id}/slides`, entries);
+      await api.put(`/channels/${channel.id}/slides`, nextOrder.map((slideId) => ({ slideId })));
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
       onSaved();
     } catch (e) {
       onError(e);
     }
+  };
+
+  const remove = (slideId: string) => {
+    if (!confirm(`„${title(slideId)}“ aus dem Channel entfernen? Ihre Termine in diesem Channel werden gelöscht.`)) return;
+    const next = order.filter((id) => id !== slideId);
+    setOrder(next);
+    void save(next).then(reload);
   };
 
   return (
@@ -50,60 +54,68 @@ function ChannelEditor({ channelId, slides, user, onError, onSaved }: { channelI
           <span>Name</span>
           <input value={channel.name} disabled={!editable} onChange={(e) => setChannel({ ...channel, name: e.target.value })} />
         </label>
-        <label className="field">
-          <span>Übergang</span>
-          <select value={channel.transition} disabled={!editable} onChange={(e) => setChannel({ ...channel, transition: e.target.value as Channel['transition'] })}>
-            <option value="fade">Überblenden</option>
-            <option value="slide">Schieben</option>
-            <option value="none">Ohne</option>
-          </select>
-        </label>
-        <label className="field">
-          <span>Standarddauer (s)</span>
-          <input type="number" min={1} value={channel.defaultDuration} disabled={!editable} onChange={(e) => setChannel({ ...channel, defaultDuration: Number(e.target.value) })} />
-        </label>
+        <div className="row row--fields">
+          <label className="field">
+            <span>Übergang</span>
+            <select value={channel.transition} disabled={!editable} onChange={(e) => setChannel({ ...channel, transition: e.target.value as Channel['transition'] })}>
+              <option value="fade">Überblenden</option>
+              <option value="slide">Schieben</option>
+              <option value="none">Ohne</option>
+            </select>
+          </label>
+          <label className="field">
+            <span>Standarddauer (s)</span>
+            <input type="number" min={1} value={channel.defaultDuration} disabled={!editable} onChange={(e) => setChannel({ ...channel, defaultDuration: Number(e.target.value) })} />
+          </label>
+        </div>
         <label className="field field--check">
           <input type="checkbox" checked={channel.isFavorite} disabled={!editable} onChange={(e) => setChannel({ ...channel, isFavorite: e.target.checked })} />
           Favorit
         </label>
       </div>
-      <h3>Folien</h3>
-      <table className="table">
-        <thead>
-          <tr><th>#</th><th>Folie</th><th>Sichtbar ab</th><th>Sichtbar bis</th><th /></tr>
-        </thead>
-        <tbody>
-          {entries.map((entry, i) => (
-            <tr key={`${entry.slideId}-${i}`}>
-              <td>{i + 1}</td>
-              <td>{title(entry.slideId)}</td>
-              <td><input type="datetime-local" value={toLocalInput(entry.windowStart)} disabled={!editable} onChange={(e) => update(i, { windowStart: fromLocalInput(e.target.value) })} /></td>
-              <td><input type="datetime-local" value={toLocalInput(entry.windowEnd)} disabled={!editable} onChange={(e) => update(i, { windowEnd: fromLocalInput(e.target.value) })} /></td>
-              <td className="actions">
-                {editable && (
-                  <>
-                    <button disabled={i === 0} onClick={() => move(i, -1)} aria-label="nach oben">↑</button>
-                    <button disabled={i === entries.length - 1} onClick={() => move(i, 1)} aria-label="nach unten">↓</button>
-                    <button className="danger" onClick={() => setEntries(entries.filter((_, idx) => idx !== i))}>Entfernen</button>
-                  </>
-                )}
-              </td>
-            </tr>
+
+      <h3>Reihenfolge</h3>
+      <p className="muted">So laufen die Folien nacheinander ab, sofern sie laut Kalender gerade dran sind.</p>
+      {order.length ? (
+        <ol className="order">
+          {order.map((slideId, i) => (
+            <li key={slideId}>
+              <span>{title(slideId)}</span>
+              {editable && (
+                <span className="actions">
+                  <button disabled={i === 0} onClick={() => move(i, -1)} aria-label="nach oben">↑</button>
+                  <button disabled={i === order.length - 1} onClick={() => move(i, 1)} aria-label="nach unten">↓</button>
+                  <button className="danger" onClick={() => remove(slideId)}>Entfernen</button>
+                </span>
+              )}
+            </li>
           ))}
-        </tbody>
-      </table>
+        </ol>
+      ) : (
+        <p className="muted">Noch keine Folien. Über „Folie einplanen“ im Kalender hinzufügen.</p>
+      )}
       {editable && (
         <div className="row">
-          <select value={add} onChange={(e) => setAdd(e.target.value)}>
-            <option value="">Folie hinzufügen …</option>
-            {slides.map((slide) => (
-              <option key={slide.id} value={slide.id}>{slide.title} ({slide.type})</option>
-            ))}
-          </select>
-          <button disabled={!add} onClick={() => { setEntries([...entries, { slideId: add, windowStart: null, windowEnd: null }]); setAdd(''); }}>Hinzufügen</button>
-          <button className="primary" onClick={save}>Speichern</button>
+          <button className="primary" onClick={() => save()}>Speichern</button>
+          {saved && <span className="saved">Gespeichert ✓</span>}
         </div>
       )}
+
+      <h3>Kalender</h3>
+      <p className="muted">Eine Folie läuft nur, wenn sie hier einen Termin hat. Für „immer“ einen unbefristeten Termin anlegen.</p>
+      <ScheduleCalendar
+        scope="channel"
+        channelId={channel.id}
+        channels={[]}
+        slides={slides}
+        displays={[]}
+        canEdit={editable}
+        onChanged={() => {
+          void reload();
+          onSaved();
+        }}
+        onError={onError}
+      />
     </div>
   );
 }

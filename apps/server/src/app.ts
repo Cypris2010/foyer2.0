@@ -23,6 +23,7 @@ import { hashPassword } from './crypto.ts';
 import { securityHeaders } from './headers.ts';
 import { displayState } from './status.ts';
 import { LeaseTable } from './leases.ts';
+import { registerScheduleRoutes } from './schedule-routes.ts';
 
 type Env = AuthEnv;
 
@@ -50,13 +51,7 @@ const channelBody = z.object({
   isFavorite: z.boolean().default(false),
   published: z.boolean().default(true),
 });
-const channelSlides = z.array(
-  z.object({
-    slideId: z.string(),
-    windowStart: z.number().int().nullable().default(null),
-    windowEnd: z.number().int().nullable().default(null),
-  }),
-);
+const channelSlides = z.array(z.object({ slideId: z.string() }));
 const slideBody = z.object({
   title: z.string().min(1).max(300),
   type: z.string().min(1).max(100),
@@ -367,13 +362,8 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
   admin.get('/channels/:id', (c) => {
     const row = db.prepare('SELECT * FROM channels WHERE id = ?').get(c.req.param('id'));
     if (!row) return c.json({ error: 'Nicht gefunden' }, 404);
-    const slides = db
-      .prepare('SELECT slide_id, window_start, window_end FROM channel_slides WHERE channel_id = ? ORDER BY position')
-      .all(c.req.param('id')) as any[];
-    return c.json({
-      ...channelOut(row),
-      slides: slides.map((s) => ({ slideId: s.slide_id, windowStart: s.window_start, windowEnd: s.window_end })),
-    });
+    const slides = db.prepare('SELECT slide_id FROM channel_slides WHERE channel_id = ? ORDER BY position').all(c.req.param('id')) as any[];
+    return c.json({ ...channelOut(row), slides: slides.map((s) => ({ slideId: s.slide_id })) });
   });
 
   admin.post('/channels', editor, async (c) => {
@@ -407,11 +397,16 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
     if (!body.success) return badRequest(c, body.error);
     const channelId = c.req.param('id');
     if (!db.prepare('SELECT 1 FROM channels WHERE id = ?').get(channelId)) return c.json({ error: 'Nicht gefunden' }, 404);
+    // A slide appears once per channel; when it plays is up to the channel calendar.
+    const slideIds = [...new Set(body.data.map((s) => s.slideId))];
     try {
       transaction(db, () => {
         db.prepare('DELETE FROM channel_slides WHERE channel_id = ?').run(channelId);
-        const insert = db.prepare('INSERT INTO channel_slides (channel_id, slide_id, position, window_start, window_end) VALUES (?, ?, ?, ?, ?)');
-        body.data.forEach((s, position) => insert.run(channelId, s.slideId, position, s.windowStart, s.windowEnd));
+        const insert = db.prepare('INSERT INTO channel_slides (channel_id, slide_id, position) VALUES (?, ?, ?)');
+        slideIds.forEach((slideId, position) => insert.run(channelId, slideId, position));
+        // Calendar entries of slides that left the channel go with them.
+        const placeholders = slideIds.map(() => '?').join(',') || "''";
+        db.prepare(`DELETE FROM schedules WHERE scope = 'channel' AND channel_id = ? AND content_id NOT IN (${placeholders})`).run(channelId, ...slideIds);
         db.prepare('UPDATE channels SET updated_at = ? WHERE id = ?').run(ctx.now(), channelId);
       });
     } catch (err) {
@@ -425,6 +420,7 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
   admin.delete('/channels/:id', editor, (c) => {
     const result = db.prepare('DELETE FROM channels WHERE id = ?').run(c.req.param('id'));
     if (!result.changes) return c.json({ error: 'Nicht gefunden' }, 404);
+    db.prepare("DELETE FROM schedules WHERE content_kind = 'channel' AND content_id = ?").run(c.req.param('id'));
     audit(db, c.get('user').id, 'delete', 'channel', c.req.param('id'));
     events.broadcast('manifest-changed');
     return c.json({ ok: true });
@@ -494,10 +490,13 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
     if (!existing) return c.json({ error: 'Nicht gefunden' }, 404);
     if (!mayEditType(c, existing.type)) return c.json({ error: 'Dieser Folientyp erfordert Admin-Rechte' }, 403);
     db.prepare('DELETE FROM slides WHERE id = ?').run(c.req.param('id'));
+    db.prepare("DELETE FROM schedules WHERE content_kind = 'slide' AND content_id = ?").run(c.req.param('id'));
     audit(db, c.get('user').id, 'delete', 'slide', c.req.param('id'));
     events.broadcast('manifest-changed');
     return c.json({ ok: true });
   });
+
+  registerScheduleRoutes(admin, ctx, editor);
 
   // Preview manifest for one slide (admin preview player at /p/preview/<slideId>).
   admin.get('/preview/slides/:id/manifest', async (c) => {

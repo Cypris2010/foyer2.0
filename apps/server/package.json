@@ -12,6 +12,7 @@
     "@foyer/slide-types": "*",
     "@hono/node-server": "^1.19.6",
     "hono": "^4.10.4",
+    "rrule": "2.8.1",
     "zod": "^4.1.0"
   },
   "devDependencies": {

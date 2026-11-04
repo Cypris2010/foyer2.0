@@ -7,6 +7,7 @@ import { EventHub } from '../apps/server/src/events.ts';
 import { hashPassword, randomToken, sha256 } from '../apps/server/src/crypto.ts';
 import { resetLoginThrottle } from '../apps/server/src/auth.ts';
 import { clearDataCache } from '../apps/server/src/manifest.ts';
+import { utcToLocal } from '../apps/server/src/schedule-engine.ts';
 import type { AppContext } from '../apps/server/src/context.ts';
 
 const slideTypesDir = join(import.meta.dirname, '../slide-types');
@@ -42,18 +43,22 @@ export async function setup(now = Date.parse('2026-11-04T10:00:00Z')) {
 
   const channelId = 'ch1';
   db.prepare('INSERT INTO channels (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)').run(channelId, 'Foyer', now, now);
-  const insertSlide = (slideId: string, type: string, config: unknown, position: number, windowStart: number | null = null, windowEnd: number | null = null) => {
+  const local = (ms: number) => utcToLocal(ms, 'Europe/Berlin');
+  // Slides play only with a channel calendar entry; null start/end = open-ended.
+  const insertSlide = (slideId: string, type: string, config: unknown, position: number, start: number | null = null, end: number | null = null) => {
     db.prepare('INSERT INTO slides (id, title, type, config_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)').run(
       slideId, slideId, type, JSON.stringify(config), now, now,
     );
-    db.prepare('INSERT INTO channel_slides (channel_id, slide_id, position, window_start, window_end) VALUES (?, ?, ?, ?, ?)').run(
-      channelId, slideId, position, windowStart, windowEnd,
-    );
+    db.prepare('INSERT INTO channel_slides (channel_id, slide_id, position) VALUES (?, ?, ?)').run(channelId, slideId, position);
+    db.prepare(
+      `INSERT INTO schedules (id, scope, channel_id, content_kind, content_id, start_local, end_local, created_at, updated_at)
+       VALUES (?, 'channel', ?, 'slide', ?, ?, ?, ?, ?)`,
+    ).run(`plan-${slideId}`, channelId, slideId, start === null ? '2000-01-01T00:00' : local(start), end === null ? null : local(end), now, now);
   };
   insertSlide('s-text', 'text', { title: 'Hallo', qrUrl: 'https://example.org' }, 0);
   insertSlide('s-html', 'html', { html: '<h1>{{display.name}}</h1>', js: 'var x = "</script>";' }, 1);
   insertSlide('s-later', 'text', { title: 'Später' }, 2, now + 3600_000, null);
-  insertSlide('s-expired', 'text', { title: 'Vorbei' }, 3, null, now - 1000);
+  insertSlide('s-expired', 'text', { title: 'Vorbei' }, 3, now - 7200_000, now - 60_000);
 
   const token = randomToken();
   db.prepare('INSERT INTO displays (id, name, token_hash, default_channel_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)').run(
@@ -75,7 +80,7 @@ export async function setup(now = Date.parse('2026-11-04T10:00:00Z')) {
     clock += ms;
   };
 
-  return { app, ctx, db, token, now, loginAs, advance };
+  return { app, ctx, db, token, now, local, loginAs, advance, channelId };
 }
 
 export function json(method: string, body: unknown, cookie?: string): RequestInit {

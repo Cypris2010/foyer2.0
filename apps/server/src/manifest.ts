@@ -1,6 +1,10 @@
 // Resolves what a display shows right now and packs it into the player manifest.
 import type { AppContext } from './context.ts';
 import { hmac, sha256 } from './crypto.ts';
+import { activeChannelSlides, displayContent, minTime } from './planning.ts';
+
+/** Seconds for single slides scheduled without a channel around them. */
+const DEFAULT_DURATION = 10;
 
 export interface DisplayRow {
   id: string;
@@ -26,8 +30,6 @@ interface SlideRow {
   background_json: string | null;
   duration: number | null;
   updated_at: number;
-  window_start: number | null;
-  window_end: number | null;
 }
 
 export interface ManifestSlide {
@@ -49,7 +51,7 @@ export interface Manifest {
   display: { id: string; name: string; showProgress: boolean; orientation: string };
   channel: { id: string; name: string; transition: string } | null;
   slides: ManifestSlide[];
-  /** When the content changes next (slide windows); the player re-fetches then. */
+  /** When the content changes next (calendar); the player re-fetches then. */
   nextChange: string | null;
   settings: { locale: string; timeZone: string };
 }
@@ -117,48 +119,53 @@ export async function buildSlideEntry(
 }
 
 /**
+ * Resolves the calendar (planning.ts) into the playlist of a display.
  * `preview` signs sandbox documents as "preview:<displayId>", so admins can
  * view them from outside the player networks (they hold no personal data).
  */
 export async function buildManifest(ctx: AppContext, display: DisplayRow, opts: { preview?: boolean } = {}): Promise<Manifest> {
   const documentDisplayId = opts.preview ? `preview:${display.id}` : display.id;
   const now = ctx.now();
-  // Phase 3 adds schedules here; until then the default channel is active.
-  const channel = display.default_channel_id
-    ? (ctx.db
-        .prepare('SELECT id, name, transition, default_duration FROM channels WHERE id = ? AND published = 1')
-        .get(display.default_channel_id) as ChannelRow | undefined)
-    : undefined;
+  const content = displayContent(ctx.db, display.id, display.default_channel_id, now, ctx.timeZone);
+  let nextChange = content.nextChange;
 
+  const channelById = ctx.db.prepare('SELECT id, name, transition, default_duration FROM channels WHERE id = ? AND published = 1');
+  const slideById = ctx.db.prepare('SELECT * FROM slides WHERE id = ? AND published = 1');
+  const channelSlideRows = ctx.db.prepare(
+    `SELECT s.* FROM channel_slides cs JOIN slides s ON s.id = cs.slide_id
+     WHERE cs.channel_id = ? AND s.published = 1 ORDER BY cs.position`,
+  );
+
+  const channels: ChannelRow[] = [];
   const slides: ManifestSlide[] = [];
-  let nextChange: number | null = null;
-  const consider = (t: number | null) => {
-    if (t !== null && t > now && (nextChange === null || t < nextChange)) nextChange = t;
+  const seen = new Set<string>();
+  const push = async (row: SlideRow, defaultDuration: number) => {
+    if (seen.has(row.id)) return;
+    seen.add(row.id);
+    const entry = await buildSlideEntry(ctx, row, defaultDuration, display.id, documentDisplayId);
+    if (entry) slides.push(entry);
   };
 
-  if (channel) {
-    const rows = ctx.db
-      .prepare(
-        `SELECT s.id, s.title, s.type, s.config_json, s.background_json, s.duration, s.updated_at,
-                cs.window_start, cs.window_end
-         FROM channel_slides cs JOIN slides s ON s.id = cs.slide_id
-         WHERE cs.channel_id = ? AND s.published = 1
-         ORDER BY cs.position`,
-      )
-      .all(channel.id) as unknown as SlideRow[];
-    for (const row of rows) {
-      consider(row.window_start);
-      consider(row.window_end);
-      if (row.window_start !== null && row.window_start > now) continue;
-      if (row.window_end !== null && row.window_end <= now) continue;
-      const entry = await buildSlideEntry(ctx, row, channel.default_duration, display.id, documentDisplayId);
-      if (entry) slides.push(entry);
+  for (const item of content.items) {
+    if (item.kind === 'channel') {
+      const channel = channelById.get(item.id) as ChannelRow | undefined;
+      if (!channel) continue;
+      channels.push(channel);
+      const active = activeChannelSlides(ctx.db, channel.id, now, ctx.timeZone);
+      nextChange = minTime(nextChange, active.nextChange);
+      for (const row of channelSlideRows.all(channel.id) as unknown as SlideRow[]) {
+        if (active.slideIds.has(row.id)) await push(row, channel.default_duration);
+      }
+    } else {
+      const row = slideById.get(item.id) as SlideRow | undefined;
+      if (row) await push(row, channels[0]?.default_duration ?? DEFAULT_DURATION);
     }
   }
 
+  const lead = channels[0];
   const body = {
     display: { id: display.id, name: display.name, showProgress: display.show_progress === 1, orientation: display.orientation },
-    channel: channel ? { id: channel.id, name: channel.name, transition: channel.transition } : null,
+    channel: lead ? { id: lead.id, name: channels.map((c) => c.name).join(' + '), transition: lead.transition } : null,
     slides,
     nextChange: nextChange === null ? null : new Date(nextChange).toISOString(),
     settings: { locale: ctx.locale, timeZone: ctx.timeZone },

@@ -487,7 +487,11 @@ audit_log(id, user_id, action, entity, entity_id, at, diff_json)   -- optional, 
 - **Displays**: Kachel-Grid mit Live-Vorschau, Online-Status, aktuelle Slide, „Neu laden“, „Identifizieren“, Pairing.
 - **Channels**: Slide-Liste per Drag & Drop, Zeitfenster pro Slide (mit Status geplant/aktiv/abgelaufen wie heute), Dauer/Übergang, Favoriten, Vorschau 16:9/9:16.
 - **Slides**: Typ-Auswahl als Kachelgalerie, schema-generiertes Formular mit Live-Vorschau daneben, Hintergrund-Auswahl.
-- **Scheduler**: Kalender Woche/Monat/Liste, Farbe pro Display, Serien mit RRULE-Builder (inkl. „n-ter Wochentag“), Ausnahmen, Einzel- vs. Serienbearbeitung, Konfliktwarnung, Vorlagen auf mehrere Displays, optional Ferien-ICS als automatische Ausnahmen.
+- **Kalender** (umgesetzt, `apps/admin/src/ScheduleCalendar.tsx`, EventCalendar wie in wp-foyer): Woche/Monat/Liste, Farbe pro Display, Display-Filter, Termine per Klick oder Ziehen, Dialog mit Wiederholung (täglich, wöchentlich an Tagen, monatlich am Tag oder am n-ten Wochentag, Intervall, Ende nie/am/nach N), „Nur dieser Termin / Ganze Serie“, Verschieben per Drag & Drop (nur dieser Termin).
+  - **Zwei Ebenen, ein Kalender:** Auf Displays plant man einen **Channel oder eine einzelne Folie**; im Channel plant man, **wann welche Folie läuft**. Eine Folie im Channel läuft **nur mit Termin** („unbefristet“ für dauerhaft).
+  - **Regeln auf dem Display** (`apps/server/src/planning.ts`): Exklusive Termine zeigen nur sich selbst. Sonst ersetzt ein geplanter Channel den Standard-Channel; **mehrere gleichzeitig werden gekoppelt** (Folien nacheinander). Geplante Einzelfolien kommen zum laufenden Programm hinzu. Der Kalender markiert gekoppelte Termine.
+  - Serien rechnen in Schulzeit (Wandzeit, DST-sicher) mit `rrule`; „endet nach N“ zählt ab Serienbeginn (in wp-foyer falsch). Ferien werden nicht berücksichtigt (bewusst entschieden).
+  - Noch offen: Vorlagen auf mehrere Displays anwenden (wp-foyer „Templates“), Wochen-Zeitstrahl, „Vorschau für Zeitpunkt“.
 - **Medienbibliothek**: Upload mit Fortschritt, Status der Transkodierung, Belegt-in-Anzeige.
 - **Einstellungen**: Zeitzone, Datumsformat, Standarddauer/-übergang, Hintergrund-Zoom, Datenquellen-Proxy (Untis-URLs, die der Server durchreicht; die URL pro Folie bleibt wie heute), Rollen.
 - Die WP-Sonderfälle (Login-Redirect, WP-Menüs ausblenden) entfallen, weil es ein eigenes Admin gibt.
@@ -511,7 +515,7 @@ Ein CLI-Importer (`foyer import-wp --db mysql://… --uploads /pfad`) liest `wp_
 | **0 Fundament** | **Airtame-Probe-Seite (2.3) zuerst**, dann Monorepo (`server`, `admin`, `player`, `slide-sdk`, `slide-types`), DB-Schema, Auth, Docker | Messwerte vom Gerät + lauffähiges Gerüst |
 | **1 MVP** | Displays mit Token-URL, Channels, Slides `text` (+QR), `image`, `iframe`, **`html` (mit Lebenszyklus)**, Player mit Manifest/SSE/Ticker/Übergängen, Fortschrittsbalken | ersetzt Basis-Foyer |
 | **2 Video** | Media-Pipeline (ffmpeg), Video-Hintergrund + Video-Slide, Offline-Cache, Heartbeat/Monitoring | Kapitel 6 umgesetzt |
-| **3 Scheduler** | Schedules mit `rrule`, Overrides, Konflikte, Kalender-UI, Vorlagen | Funktionsgleich zum Scheduler |
+| **3 Scheduler** | ✅ Kalender für Displays und Channels, Serien mit `rrule`, Overrides/Ausnahmen, Kopplung, Einzelfolien, exklusiv. Offen: Vorlagen | Funktionsgleich zum Scheduler, plus Folien-Kalender |
 | **4 Datenquellen** | `rss`, `calendar` (ICS), `pdf`; **`webuntis-room-display` + `teacher-dashboard` als 1:1-Port mit Golden Tests** (5.6) | alle heutigen Typen |
 | **5 Migration & Extras** | WP-Importer, Layouts/Zonen (Split-Channels), Rollen/Audit | Umstieg |
 

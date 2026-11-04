@@ -117,3 +117,47 @@ main { padding: 1.25rem; max-width: 1400px; margin: 0 auto; }
 .preview__frame iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0; }
 
 .login { max-width: 360px; margin: 12vh auto; padding: 2rem; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; display: grid; gap: 1rem; }
+
+/* Calendar (EventCalendar) themed to the admin colours */
+.ec {
+  --ec-bg-color: var(--surface);
+  --ec-border-color: var(--border);
+  --ec-today-bg-color: color-mix(in srgb, var(--accent) 8%, transparent);
+  --ec-highlight-color: color-mix(in srgb, var(--accent) 15%, transparent);
+  --ec-button-bg-color: var(--surface);
+  --ec-button-border-color: var(--border);
+  --ec-button-text-color: var(--text);
+  --ec-button-active-bg-color: var(--accent);
+  --ec-button-active-border-color: var(--accent);
+  --ec-button-active-text-color: #fff;
+  --ec-popup-bg-color: var(--surface);
+  --ec-now-indicator-color: var(--danger);
+  color: var(--text);
+}
+.schedule-calendar { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 0.75rem; }
+.ev { display: grid; gap: 1px; font-size: 0.78rem; line-height: 1.2; overflow: hidden; }
+.ev-title { font-weight: 600; display: flex; align-items: center; gap: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ev-swatch { flex: none; width: 8px; height: 8px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.85); }
+.ev-meta { font-size: 0.72rem; opacity: 0.9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Schedule dialog */
+.modal { position: fixed; inset: 0; z-index: 50; background: rgba(15, 23, 42, 0.45); display: flex; align-items: flex-start; justify-content: center; padding: 6vh 1rem; overflow-y: auto; }
+.modal__box { width: min(680px, 100%); background: var(--surface); border-radius: 12px; padding: 1.25rem; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3); display: grid; gap: 1rem; }
+.modal__head { display: flex; justify-content: space-between; align-items: center; }
+.chips { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin: 0.25rem 0; }
+.chip { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.25rem 0.7rem; border: 1px solid var(--border); border-radius: 999px; cursor: pointer; user-select: none; }
+.chip.is-active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.chip input[type="radio"], .chip input[type="checkbox"] { position: absolute; opacity: 0; pointer-events: none; }
+.chip input[type="number"] { width: 4.5rem; }
+.swatch { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.fieldset { border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem; display: grid; gap: 0.4rem; }
+.fieldset legend { padding: 0 0.3rem; color: var(--muted); font-size: 0.85rem; }
+.row--fields { align-items: end; margin: 0; }
+.row--fields .field { flex: 1; min-width: 200px; }
+.field--inline { display: flex; align-items: center; gap: 0.5rem; }
+.field--inline input { width: 5rem; }
+
+/* Channel slide order */
+.order { padding-left: 1.5rem; display: grid; gap: 0.35rem; }
+.order li { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; }
+.order .actions { display: flex; gap: 0.3rem; }

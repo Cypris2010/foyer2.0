@@ -80,6 +80,11 @@ function seedDemo(displayNames = ['Demo-Display']) {
       slideId, slide.title, slide.type, JSON.stringify(slide.config), now, now,
     );
     db.prepare('INSERT INTO channel_slides (channel_id, slide_id, position) VALUES (?, ?, ?)').run(channelId, slideId, position);
+    // Slides play only by channel calendar: plan them open-ended.
+    db.prepare(
+      `INSERT INTO schedules (id, scope, channel_id, content_kind, content_id, start_local, end_local, created_at, updated_at)
+       VALUES (?, 'channel', ?, 'slide', ?, '2000-01-01T00:00', NULL, ?, ?)`,
+    ).run(crypto.randomUUID(), channelId, slideId, now, now);
   });
   const key = loadTokenKey(config.dataDir);
   console.log('Demo angelegt. Player-URLs (später im Admin unter „URL anzeigen“):');
