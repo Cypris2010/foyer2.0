@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "probe",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["apps/probe/server.ts"],
+      "port": 8090
+    }
+  ]
+}

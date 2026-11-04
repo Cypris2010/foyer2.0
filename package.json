@@ -1,0 +1,25 @@
+{
+  "name": "foyer2",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "slide-types",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "npm run build -w @foyer/player && npm run dev -w @foyer/server",
+    "build": "npm run build -w @foyer/player && npm run build -w @foyer/admin",
+    "start": "npm run start -w @foyer/server",
+    "probe": "npm run start -w @foyer/probe",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.8"
+  }
+}
