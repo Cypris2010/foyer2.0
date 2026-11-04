@@ -65,6 +65,8 @@ main { padding: 1.25rem; max-width: 1400px; margin: 0 auto; }
 .badge { font-size: 0.75rem; padding: 0.1rem 0.5rem; border-radius: 999px; border: 1px solid currentColor; }
 .badge.ok { color: var(--ok); }
 .badge.off { color: var(--muted); }
+.badge.bad { color: var(--danger); }
+.badge[title] { cursor: help; }
 
 .split { display: grid; grid-template-columns: minmax(240px, 320px) 1fr; gap: 1.5rem; }
 @media (max-width: 800px) { .split { grid-template-columns: 1fr; } }

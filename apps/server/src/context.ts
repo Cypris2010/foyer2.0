@@ -12,5 +12,7 @@ export interface AppContext {
   timeZone: string;
   playerNetworks: string[];
   trustedProxies: string[];
+  /** Server start, for the reconnect grace period in the display status. */
+  startedAt: number;
   now: () => number;
 }

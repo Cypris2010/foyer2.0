@@ -16,7 +16,7 @@ export interface Display {
   networks: string;
   lastSeenAt: number | null;
   status: { version: string | null; slideId: string | null; errors: string[]; screen?: string; ip?: string } | null;
-  connected: boolean;
+  state: 'online' | 'offline' | 'never' | 'checking';
 }
 
 export interface Channel {

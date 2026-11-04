@@ -69,6 +69,16 @@ describe('Player-Zugang', () => {
     expect((await app.request(`/api/player/${fresh}/manifest`)).status).toBe(200);
   });
 
+  it('zeigt Displays erst nach einem Lebenszeichen als online', async () => {
+    const { app, token, loginAs } = await setup();
+    const cookie = await loginAs('viewer');
+    const before = await (await app.request('/api/displays', { headers: { cookie } })).json();
+    expect(before[0].state).toBe('never');
+    await app.request(`/api/player/${token}/heartbeat`, json('POST', { version: null, slideId: null }));
+    const after = await (await app.request('/api/displays', { headers: { cookie } })).json();
+    expect(after[0].state).toBe('online');
+  });
+
   it('nimmt Heartbeats an und speichert den Status', async () => {
     const { app, db, token } = await setup();
     const res = await app.request(`/api/player/${token}/heartbeat`, json('POST', { version: 'abc', slideId: 's-text', errors: [] }));

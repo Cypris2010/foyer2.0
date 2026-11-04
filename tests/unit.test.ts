@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { clientIp, ipInCidr } from '../apps/server/src/net.ts';
 import { hashPassword, verifyPassword } from '../apps/server/src/crypto.ts';
+import { displayState } from '../apps/server/src/status.ts';
 import { fillPlaceholders } from '../packages/slide-sdk/src/runtime.ts';
 import { buildDocument, parseVariables } from '../slide-types/html/document.ts';
 import { config as htmlConfig } from '../slide-types/html/index.ts';
@@ -25,6 +26,30 @@ describe('Netzprüfung', () => {
     expect(clientIp('8.8.8.8', '10.0.0.1', ['127.0.0.1'])).toBe('8.8.8.8');
     expect(clientIp('127.0.0.1', '10.0.0.1', ['127.0.0.1'])).toBe('10.0.0.1');
     expect(clientIp('127.0.0.1', '1.2.3.4, 10.0.0.1', ['127.0.0.1'])).toBe('10.0.0.1');
+  });
+});
+
+describe('Display-Status', () => {
+  const now = 1_000_000_000;
+  const longAgoStarted = now - 3600_000;
+
+  it('ist online bei Live-Verbindung oder frischem Lebenszeichen', () => {
+    expect(displayState({ connected: true, lastSeenAt: null, now, serverStartedAt: longAgoStarted })).toBe('online');
+    // Player ohne EventSource: nur Heartbeats
+    expect(displayState({ connected: false, lastSeenAt: now - 60_000, now, serverStartedAt: longAgoStarted })).toBe('online');
+  });
+
+  it('ist offline nach 90 s ohne Lebenszeichen', () => {
+    expect(displayState({ connected: false, lastSeenAt: now - 90_000, now, serverStartedAt: longAgoStarted })).toBe('offline');
+  });
+
+  it('unterscheidet "noch nie verbunden"', () => {
+    expect(displayState({ connected: false, lastSeenAt: null, now, serverStartedAt: longAgoStarted })).toBe('never');
+  });
+
+  it('meldet kurz nach dem Serverstart "wird geprüft" statt offline', () => {
+    expect(displayState({ connected: false, lastSeenAt: now - 600_000, now, serverStartedAt: now - 10_000 })).toBe('checking');
+    expect(displayState({ connected: false, lastSeenAt: null, now, serverStartedAt: now - 10_000 })).toBe('never');
   });
 });
 

@@ -1,12 +1,39 @@
 import { useEffect, useState } from 'react';
 import { api, can, type Channel, type Display, type User } from './api.ts';
 
-function ago(ts: number | null): string {
-  if (!ts) return 'nie';
-  const s = Math.round((Date.now() - ts) / 1000);
-  if (s < 60) return `vor ${s} s`;
-  if (s < 3600) return `vor ${Math.round(s / 60)} min`;
-  return new Date(ts).toLocaleString('de-DE');
+function since(ts: number): string {
+  const date = new Date(ts);
+  const time = date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+  const today = new Date();
+  if (date.toDateString() === today.toDateString()) return time;
+  if (today.getTime() - ts < 6 * 86400_000) return `${date.toLocaleDateString('de-DE', { weekday: 'short' })} ${time}`;
+  return `${date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })} ${time}`;
+}
+
+const STATE: Record<Display['state'], { className: string; hint: string }> = {
+  online: {
+    className: 'ok',
+    hint: 'Der Player läuft und ist mit dem Server verbunden. Ob der Bildschirm eingeschaltet ist, kann Foyer nicht erkennen.',
+  },
+  offline: {
+    className: 'bad',
+    hint: 'Mögliche Gründe: Gerät aus, Netzwerkproblem, Bildschirmfreigabe läuft, URL in Airtame Cloud geändert.',
+  },
+  never: { className: 'off', hint: 'Player-URL in Airtame Cloud als Website eintragen.' },
+  checking: { className: 'off', hint: 'Der Server wurde gerade neu gestartet; die Player verbinden sich neu.' },
+};
+
+function stateLabel(display: Display): string {
+  switch (display.state) {
+    case 'online':
+      return 'Online';
+    case 'offline':
+      return display.lastSeenAt ? `Offline seit ${since(display.lastSeenAt)}` : 'Offline';
+    case 'never':
+      return 'Noch nie verbunden';
+    case 'checking':
+      return 'Wird geprüft …';
+  }
 }
 
 export function Displays({ user, onError }: { user: User; onError: (e: unknown) => void }) {
@@ -80,12 +107,11 @@ export function Displays({ user, onError }: { user: User; onError: (e: unknown) 
           <article key={display.id} className="card">
             <header>
               <h2>{display.name}</h2>
-              <span className={`badge ${display.connected ? 'ok' : 'off'}`}>{display.connected ? 'verbunden' : 'getrennt'}</span>
+              <span className={`badge ${STATE[display.state].className}`} title={STATE[display.state].hint}>
+                {stateLabel(display)}
+              </span>
             </header>
-            <p className="muted">
-              Zuletzt gesehen {ago(display.lastSeenAt)}
-              {display.status?.screen ? ` · ${display.status.screen}` : ''}
-            </p>
+            {display.status?.screen && <p className="muted">Bildschirm {display.status.screen}</p>}
             {display.status?.errors?.length ? <p className="error">{display.status.errors.join(' · ')}</p> : null}
             <label className="field">
               <span>Standard-Channel</span>

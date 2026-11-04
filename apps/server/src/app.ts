@@ -21,6 +21,7 @@ import { buildManifest, buildSlideEntry, documentSignature, type DisplayRow } fr
 import { parseConfig } from './registry.ts';
 import { hashPassword } from './crypto.ts';
 import { securityHeaders } from './headers.ts';
+import { displayState } from './status.ts';
 
 type Env = AuthEnv;
 
@@ -190,7 +191,12 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
         networks: r.networks,
         lastSeenAt: r.last_seen_at,
         status: r.status_json ? JSON.parse(r.status_json) : null,
-        connected: events.connected(r.id) > 0,
+        state: displayState({
+          connected: events.connected(r.id) > 0,
+          lastSeenAt: r.last_seen_at,
+          now: ctx.now(),
+          serverStartedAt: ctx.startedAt,
+        }),
       })),
     );
   });

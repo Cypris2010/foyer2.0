@@ -24,6 +24,7 @@ export async function createContext(db: Db = openDb(config.dataDir)): Promise<Ap
     timeZone: config.timeZone,
     playerNetworks: config.playerNetworks,
     trustedProxies: config.trustedProxies,
+    startedAt: Date.now(),
     now: () => Date.now(),
   };
 }

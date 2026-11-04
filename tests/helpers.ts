@@ -24,6 +24,7 @@ export async function setup(now = Date.parse('2026-11-04T10:00:00Z')) {
     timeZone: 'Europe/Berlin',
     playerNetworks: ['10.0.0.0/8', '127.0.0.0/8'],
     trustedProxies: ['127.0.0.1'],
+    startedAt: now - 3600_000,
     now: () => now,
   };
   // Tests choose the socket address via a header the real server never reads.
