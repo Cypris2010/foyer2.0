@@ -15,7 +15,7 @@ const ROOMS = fixture('raeume_ganzer_tag.txt');
 const TEACHERS = fixture('lehrer.txt');
 const ROOMS_URL = 'https://untis.example/raeume_ganzer_tag.txt';
 const TEACHERS_URL = 'https://untis.example/lehrer.txt';
-const ctx = { locale: 'de-DE', timeZone: 'Europe/Berlin' };
+const ctx = { locale: 'de-DE', timeZone: 'Europe/Berlin', untisApi: null };
 
 let files: Record<string, string>;
 let fetchMock: ReturnType<typeof vi.fn>;
@@ -65,7 +65,7 @@ describe('Untis-TXT-Export', () => {
 
   it('sortiert Räume natürlich', () => {
     const lessons = parseUntisText('A 10|s|e|||||None\nA 2|s|e|||||None\nb 1|s|e|||||None\nA  2|s|e|||||None\n');
-    expect(distinctKeys(lessons)).toEqual(['A 2', 'A 10', 'b 1']);
+    expect(distinctKeys(lessons.map((l) => l.key))).toEqual(['A 2', 'A 10', 'b 1']);
   });
 
   it('erlaubt nur http- und https-Adressen', () => {

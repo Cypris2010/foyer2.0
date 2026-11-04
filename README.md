@@ -71,12 +71,17 @@ Die Dateien liegen unter `FOYER_DATA_DIR/media` (`originals/` für die Uploads, 
 
 Die beiden Folien sind 1:1 aus wp-foyer übernommen (gleiche Darstellung, Beschriftungen und Optionen). Neu ist, wo die Daten herkommen:
 
-- Die **Datenquelle** (Adresse des Untis-TXT-Exports, `raeume_ganzer_tag.txt` bzw. `lehrer.txt`) wird pro Folie eingetragen; im Code steht keine Adresse.
-- Der **Server** holt den Export (geteilter Cache, Timeout, höchstens 5 MB), filtert ihn auf die gewählten Räume bzw. Lehrkräfte und schickt den Playern nur diese Zeilen. Die Daten liegen nur im Arbeitsspeicher, nie in der Datenbank oder im Log. Auch das Manifest enthält sie nicht (der Player speichert es für den Kaltstart): Der Player holt die Zeilen über eine signierte URL (`/content/data/…`, nur Schulnetz bzw. Admin-Sitzung) und hält sie nur im Speicher. Folientypen markieren das mit `personalData: true`. Fällt die Quelle aus, zeigen die Folien bis zu eine Stunde lang den letzten Stand.
+- **Datenquelle** ist der WebUntis-Datendienst. Adresse und API-Schlüssel trägt ein Admin einmal zentral unter **Einstellungen → WebUntis-API** ein; „Verbindung testen“ zeigt, ob der Schlüssel gilt und welche Freigaben er hat. Der Schlüssel liegt mit dem Token-Schlüssel verschlüsselt in der Datenbank (`token.key` bzw. `FOYER_TOKEN_KEY`), steht nicht im Audit-Log und geht nie zurück an den Browser. Nötig ist die Freigabe `stundenplan`; mit `stammdaten` zeigt das Dashboard auch Lehrkräfte ohne Unterricht am Tag.
+- Wer noch den alten TXT-Export nutzt, trägt dessen Adresse (`raeume_ganzer_tag.txt` bzw. `lehrer.txt`) in der Folie ein; eine Adresse dort hat Vorrang vor der API. Im Code steht keine Adresse.
+- Der **Server** holt die Stunden des Tages (geteilter Cache, Timeout; bei der API nur, wenn sich `/v1/stunden/stand` geändert hat), filtert ihn auf die gewählten Räume bzw. Lehrkräfte und schickt den Playern nur diese Zeilen. Die Daten liegen nur im Arbeitsspeicher, nie in der Datenbank oder im Log. Auch das Manifest enthält sie nicht (der Player speichert es für den Kaltstart): Der Player holt die Zeilen über eine signierte URL (`/content/data/…`, nur Schulnetz bzw. Admin-Sitzung) und hält sie nur im Speicher. Folientypen markieren das mit `personalData: true`. Fällt die Quelle aus, zeigen die Folien bis zu eine Stunde lang den letzten Stand.
 - Ändern sich die Daten, merkt das der Server (Takt 15 s, je nach Folie alle 30–120 s neu geholt) und meldet es den Displays. Die laufende Folie bekommt die neuen Zeilen über `update()`, ohne neu aufgebaut zu werden.
 - Räume und Lehrkräfte wählt man im Admin aus einer Liste, die aus der eingetragenen Quelle kommt.
 
-Die Quelle ist austauschbar ([`slide-types/_untis/source.ts`](slide-types/_untis/source.ts)): Eine spätere WebUntis-API-Quelle liefert dieselben Zeilen, die Folien bleiben unverändert.
+Die API-Quelle ([`slide-types/_untis/api.ts`](slide-types/_untis/api.ts)) baut daraus dieselben Zeilen wie die TXT-Exporte, die übernommenen Folien bleiben unverändert:
+
+- Raumanzeige: jede Stunde unter ihren Räumen, wie im Export auch unter dem ursprünglich geplanten Raum. Raum- und Lehrkraftwechsel stehen in der alten Schreibweise `+A 1.17(D 1.16)`. Pausenaufsicht und Bereitschaft belegen keinen Raum.
+- Lehrkräfte: je Lehrkraft die aktuelle oder nächste Stunde. Hatte sie heute Unterricht und steht keiner mehr an, ist sie für heute fertig (gelb, Status `Gone`); ohne Unterricht heute „Keine Daten“. Vertretene Stunden zählen für die Vertretung, nicht für die ursprünglich geplante Lehrkraft.
+- Status: `entfall` → Entfällt, `geaendert` → Unregelmäßig. Raumbuchungen (Veranstaltung, Konferenz mit Buchungstext) liefert die API nicht.
 
 Tests:
 

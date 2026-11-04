@@ -1,9 +1,9 @@
 // Untis data for the room display and the teacher dashboard (server only).
 //
 // A source delivers one day's lessons as normalized rows; the slide types only
-// see these rows, never where they came from. Today the rows come from the
-// pipe-separated TXT exports (raeume_ganzer_tag.txt, lehrer.txt); a WebUntis API
-// source can later fill the same rows without changing the slides.
+// see these rows, never where they came from. The rows come from the
+// pipe-separated TXT exports (raeume_ganzer_tag.txt, lehrer.txt) or, in the same
+// shape, from the WebUntis-Datendienst (api.ts).
 //
 // Lessons contain personal data (teacher codes, absences): they are kept in
 // memory only, never written to the database or logs.
@@ -78,9 +78,9 @@ export function toRows(lessons: UntisLesson[]): string[][] {
 const collator = new Intl.Collator('de', { numeric: true, sensitivity: 'base' });
 
 /** Distinct keys (rooms or teacher codes), naturally sorted: "A2" before "A10". */
-export function distinctKeys(lessons: UntisLesson[]): string[] {
-  const keys = new Set(lessons.map((l) => l.key.replace(/\s+/g, ' ')));
-  return [...keys].sort(collator.compare);
+export function distinctKeys(keys: Iterable<string>): string[] {
+  const unique = new Set([...keys].map((key) => key.replace(/\s+/g, ' ').trim()).filter(Boolean));
+  return [...unique].sort(collator.compare);
 }
 
 export class UntisError extends Error {}
