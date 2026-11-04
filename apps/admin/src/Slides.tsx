@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, can, type Slide, type SlideType, type User } from './api.ts';
 import { defaultsFor, SchemaForm } from './SchemaForm.tsx';
+import { SlideThumb } from './SlideThumb.tsx';
 
 interface Draft {
   id: string | null;
@@ -61,7 +62,8 @@ export function Slides({ user, onError }: { user: User; onError: (e: unknown) =>
   const editable = draft ? mayEdit(draft.type) : false;
 
   return (
-    <section className="split">
+    // Without a selection the overview uses the full width; editing switches to list + editor.
+    <section className={draft ? 'split' : 'overview'}>
       <div className="list">
         <h1>Folien</h1>
         {can(user, 'editor') && (
@@ -71,19 +73,28 @@ export function Slides({ user, onError }: { user: User; onError: (e: unknown) =>
             ))}
           </div>
         )}
-        <ul>
+        <ul className="slide-cards">
           {slides.map((slide) => (
             <li key={slide.id}>
-              <button className={draft?.id === slide.id ? 'link active' : 'link'} onClick={() => setDraft({ ...slide })}>
-                {slide.title} <span className="muted">({typeOf(slide.type)?.name ?? slide.type})</span>
+              <button className={draft?.id === slide.id ? 'slide-card active' : 'slide-card'} onClick={() => setDraft({ ...slide })}>
+                <SlideThumb slideId={slide.id} version={slide.updatedAt} />
+                <span className="slide-card__title">{slide.title}</span>
+                <span className="muted">
+                  {typeOf(slide.type)?.name ?? slide.type}
+                  {slide.published ? '' : ' · Entwurf'}
+                </span>
               </button>
             </li>
           ))}
         </ul>
       </div>
+      {draft && (
       <div className="detail">
-        {draft && type ? (
+        {type ? (
           <div className="editor">
+            <div className="row row--end">
+              <button onClick={() => setDraft(null)}>Zur Übersicht</button>
+            </div>
             <div className="form">
               <label className="field">
                 <span>Titel (intern)</span>
@@ -128,9 +139,10 @@ export function Slides({ user, onError }: { user: User; onError: (e: unknown) =>
             )}
           </div>
         ) : (
-          <p className="muted">Folie auswählen oder neue anlegen.</p>
+          <p className="error">Unbekannter Folientyp: {draft.type}</p>
         )}
       </div>
+      )}
     </section>
   );
 }
