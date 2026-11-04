@@ -1,13 +1,25 @@
 // Admin command line:
 //   user:create <email> <name> <role>   password from FOYER_PASSWORD or prompt
 //   demo:seed                           demo channel, slides and display; prints the player URL
+//   test:seed [--reset]                 test accounts + demo content + two displays (local testing only)
 import { createInterface } from 'node:readline/promises';
+import { existsSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import { openDb } from './db.ts';
 import { config } from './config.ts';
 import { encrypt, hashPassword, randomToken, sha256 } from './crypto.ts';
 import { loadTokenKey } from './keys.ts';
+import { TEST_ACCOUNTS } from './test-accounts.ts';
 
 const [command, ...args] = process.argv.slice(2);
+
+// --reset starts from an empty database (the token key is kept).
+if (command === 'test:seed' && args.includes('--reset')) {
+  for (const suffix of ['', '-wal', '-shm']) {
+    const file = join(config.dataDir, `foyer.sqlite${suffix}`);
+    if (existsSync(file)) rmSync(file);
+  }
+}
 const db = openDb(config.dataDir);
 
 async function readPassword(): Promise<string> {
@@ -48,7 +60,7 @@ const DEMO_CSS = `.stage { position: absolute; top: 0; right: 0; bottom: 0; left
 @keyframes rise { to { opacity: 1; transform: none; } }
 @keyframes grow { to { transform: scaleX(1); } }`;
 
-function seedDemo() {
+function seedDemo(displayNames = ['Demo-Display']) {
   const now = Date.now();
   const channelId = crypto.randomUUID();
   db.prepare('INSERT INTO channels (id, name, transition, default_duration, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)').run(
@@ -69,18 +81,40 @@ function seedDemo() {
     );
     db.prepare('INSERT INTO channel_slides (channel_id, slide_id, position) VALUES (?, ?, ?)').run(channelId, slideId, position);
   });
-  const token = randomToken();
-  db.prepare('INSERT INTO displays (id, name, token_hash, token_enc, default_channel_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
-    crypto.randomUUID(), 'Demo-Display', sha256(token), encrypt(loadTokenKey(config.dataDir), token), channelId, now, now,
-  );
-  console.log('Demo angelegt. Player-URL (später im Admin unter „URL anzeigen“):');
-  console.log(`  http://localhost:${config.port}/p/${token}`);
+  const key = loadTokenKey(config.dataDir);
+  console.log('Demo angelegt. Player-URLs (später im Admin unter „URL anzeigen“):');
+  for (const name of displayNames) {
+    const token = randomToken();
+    db.prepare('INSERT INTO displays (id, name, token_hash, token_enc, default_channel_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
+      crypto.randomUUID(), name, sha256(token), encrypt(key, token), channelId, now, now,
+    );
+    console.log(`  ${name}: http://127.0.0.1:${config.port}/p/${token}`);
+  }
+}
+
+async function seedTest() {
+  const users = (db.prepare('SELECT COUNT(*) AS n FROM users').get() as { n: number }).n;
+  if (users > 0) {
+    throw new Error('Die Datenbank enthält schon Benutzer. Für Testdaten neu beginnen mit: test:seed --reset (löscht die lokale Datenbank)');
+  }
+  for (const account of TEST_ACCOUNTS) {
+    db.prepare('INSERT INTO users (id, email, name, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(
+      crypto.randomUUID(), account.email, account.name, await hashPassword(account.password), account.role, Date.now(),
+    );
+  }
+  seedDemo(['Aula', 'Foyer Eingang']);
+  console.log('');
+  console.log('Testkonten (nur für lokale Tests, Zugangsdaten stehen öffentlich in apps/server/src/test-accounts.ts):');
+  for (const account of TEST_ACCOUNTS) console.log(`  ${account.role.padEnd(7)} ${account.email.padEnd(22)} ${account.password}`);
+  console.log('');
+  console.log(`Admin: http://127.0.0.1:${config.port}/admin/`);
 }
 
 try {
   if (command === 'user:create') await createUser();
   else if (command === 'demo:seed') seedDemo();
-  else console.log('Befehle: user:create <email> <name> <role> | demo:seed');
+  else if (command === 'test:seed') await seedTest();
+  else console.log('Befehle: user:create <email> <name> <role> | demo:seed | test:seed [--reset]');
 } catch (err) {
   console.error((err as Error).message);
   process.exitCode = 1;

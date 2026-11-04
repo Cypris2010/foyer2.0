@@ -23,9 +23,24 @@ Voraussetzung: Node.js ≥ 24.
 ```bash
 npm install
 npm run build                                   # Player + Admin bauen
-npm run cli -w @foyer/server -- user:create admin@schule.de Admin admin
-npm run cli -w @foyer/server -- demo:seed       # Demo-Channel, -Folien und -Display; gibt die Player-URL aus
+npm run cli -w @foyer/server -- test:seed       # Testkonten, Demo-Folien, zwei Displays
 npm start                                       # http://127.0.0.1:8080/admin/
+```
+
+Mit `test:seed --reset` beginnt man mit einer leeren lokalen Datenbank. Läuft auf Port 8080 schon etwas anderes, beide Befehle mit `FOYER_PORT=8088` aufrufen.
+
+**Testkonten** (nur für lokale Tests; die Passwörter sind öffentlich, der Server warnt beim Start, solange sie existieren):
+
+| Rolle | E-Mail | Passwort |
+|---|---|---|
+| admin | `admin@test.local` | `test-admin-1234` |
+| editor | `redaktion@test.local` | `test-redaktion-1234` |
+| viewer | `ansicht@test.local` | `test-ansicht-1234` |
+
+Für eine echte Installation stattdessen eigene Konten anlegen:
+
+```bash
+npm run cli -w @foyer/server -- user:create vorname.nachname@schule.de "Vorname Nachname" admin
 ```
 
 Konfiguration über Umgebungsvariablen (siehe `apps/server/src/config.ts`):
