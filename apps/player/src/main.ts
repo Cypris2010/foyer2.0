@@ -2,7 +2,7 @@ import './styles.css';
 import { clearCachedManifest, endpointsFromPath, fetchManifest, fetchServerTime, HttpError, loadCachedManifest, postJson, sessionId, storeManifest } from './api.ts';
 import { Ticker } from './ticker.ts';
 import { ServerClock } from './clock.ts';
-import { followWall, inWallFrame, isWallShell, reloadScreen, runWallShell, wallOverlay, type Wall } from './wall.ts';
+import { followWall, inWallFrame, isWallShell, reloadScreen, runWallShell, spans, stackOf, wallOverlay, type Wall } from './wall.ts';
 import { withSlideData, withoutSlideData } from './data.ts';
 import { createUpdateCheck, ownBuild } from './update.ts';
 import { createTestPattern } from './testpattern.ts';
@@ -54,6 +54,8 @@ if (!endpoints) {
 } else {
   /** Set while this screen is part of a wall (from the manifest). */
   let wall: Wall | null = null;
+  /** The part of the wall the test pattern draws: all of it when spanning, this screen in a stack. */
+  const patternWall = () => (spans(wall) ? wall : null);
   /** active: holds the display; blocked: busy elsewhere, not allowed, or released. */
   let active = false;
   let pausedUntil = 0;
@@ -84,14 +86,14 @@ if (!endpoints) {
 
   const testPattern = createTestPattern(now, () => ({
     name: wall?.screen ?? (ticker.displayName || 'Foyer'),
-    wall,
+    wall: patternWall(),
     build: ownBuild(),
     clockOffset: now() - Date.now(),
   }));
 
   const cached = loadCachedManifest(endpoints.cacheKey);
   // Part of a wall (cold start): straight into the wall shell.
-  const leaving = cached?.wall && !inWallFrame && endpoints.mode === 'display';
+  const leaving = spans(cached?.wall) && !inWallFrame && endpoints.mode === 'display';
   if (leaving) followWall(cached.wall);
   else if (cached) ticker.setManifest(withoutSlideData(cached));
 
@@ -145,8 +147,10 @@ if (!endpoints) {
         wall = manifest.wall ?? null;
         followWall(wall);
         // Joined a wall: the shell takes over from here.
-        if (wall && !inWallFrame) return;
+        if (spans(wall) && !inWallFrame) return;
       }
+      // Stack wall: the slides a few places behind the first screen (live previews too).
+      ticker.setStack(manifest.wall?.mode === 'stack' ? stackOf(manifest.wall) : null);
       // Started from the cache, the first slide went unreported.
       if (!wasActive && ticker.currentSlideId) reportNowPlaying();
       update.check(manifest.playerBuild);
@@ -203,7 +207,14 @@ if (!endpoints) {
       source.addEventListener('reload', reloadScreen);
       source.addEventListener('test-pattern', (event) => testPattern.show(JSON.parse((event as MessageEvent).data)));
       source.addEventListener('identify', () =>
-        notice(wall ? `${wall.screen} · ${wall.name}, Zeile ${wall.row + 1}, Spalte ${wall.col + 1}` : ticker.displayName || 'Foyer', 10_000),
+        notice(
+          !wall
+            ? ticker.displayName || 'Foyer'
+            : wall.mode === 'stack'
+              ? `${wall.screen} · ${wall.name}, Platz ${(wall.position ?? 0) + 1} von ${wall.screens ?? 1}`
+              : `${wall.screen} · ${wall.name}, Zeile ${wall.row + 1}, Spalte ${wall.col + 1}`,
+          10_000,
+        ),
       );
       source.addEventListener('released', () => {
         block('Dieses Display wurde für ein anderes Gerät freigegeben.');

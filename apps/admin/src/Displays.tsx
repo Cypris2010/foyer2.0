@@ -99,9 +99,33 @@ function TestPatternControls({ display, run }: { display: Display; run: (action:
   );
 }
 
+/** Stack wall: each screen in its cell, every one with its own live preview. */
+function StackThumb({ display, displays }: { display: Display; displays: Display[] }) {
+  const { rows, cols } = display.wall!;
+  const screen = display.orientation === 'portrait' ? { w: 9, h: 16 } : { w: 16, h: 9 };
+  const at = (row: number, col: number) => displays.find((d) => d.wallId === display.id && d.wallRow === row && d.wallCol === col);
+  return (
+    <div className="stack-thumb" style={{ aspectRatio: `${cols * screen.w} / ${rows * screen.h}`, gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
+      {Array.from({ length: rows * cols }, (_, i) => {
+        const occupant = at(Math.floor(i / cols), i % cols);
+        return occupant ? (
+          <PlayerThumb key={occupant.id} src={`/p/preview-display/${occupant.id}`} reloadKey={display.defaultChannelId ?? ''} orientation={display.orientation} />
+        ) : (
+          <span key={i} className="stack-thumb__empty" />
+        );
+      })}
+    </div>
+  );
+}
+
 /** Live miniature of what the display shows; a screen in a wall shows its part of the wall. */
 function DisplayThumb({ display, displays }: { display: Display; displays: Display[] }) {
   const wall = display.wallId ? displays.find((d) => d.id === display.wallId) : undefined;
+  if (display.wall?.mode === 'stack') return <StackThumb display={display} displays={displays} />;
+  // In a stack the screen plays its own slide, a few places behind the first screen.
+  if (wall?.wall?.mode === 'stack') {
+    return <PlayerThumb src={`/p/preview-display/${display.id}`} reloadKey={`${wall.defaultChannelId}-${display.wallRow}-${display.wallCol}`} orientation={wall.orientation} />;
+  }
   if (display.wall) {
     return (
       <PlayerThumb
@@ -156,6 +180,7 @@ function DisplayCard({ display, displays, channels, user, onEdit, onChanged, onE
             <dt>Wand:</dt>
             <dd>
               {display.wall.rows} × {display.wall.cols}
+              {display.wall.mode === 'stack' ? ' · Stapel' : ''}
               {screens.length ? ` · ${screens.map((d) => d.name).join(', ')}` : ''}
             </dd>
           </>
@@ -383,6 +408,19 @@ function WallSettings({ display, displays, channels, onChanged, onError }: Share
           );
         })}
       </div>
+      <label className="field">
+        <span>Modus</span>
+        <select value={wall.mode} onChange={(e) => patch({ wallMode: e.target.value })}>
+          <option value="span">Großes Bild: alle Displays zeigen zusammen eine Folie</option>
+          <option value="stack">Stapel: jedes Display zeigt eine Folie, die beim Wechsel zum nächsten weiterrutscht</option>
+        </select>
+      </label>
+      {wall.mode === 'stack' && (
+        <p className="muted">
+          Die neue Folie erscheint auf dem ersten Display (oben links) und rückt bei jedem Wechsel ein Display weiter, in Leserichtung. Alle
+          Displays wechseln gleichzeitig. Videos laufen so lange, wie die Folie auf dem ersten Display steht.
+        </p>
+      )}
       <ChannelSelect display={display} channels={channels} patch={patch} />
       <label className="field">
         <span>Bildschirme</span>
@@ -391,23 +429,25 @@ function WallSettings({ display, displays, channels, onChanged, onError }: Share
           <option value="portrait">Hochformat (9:16)</option>
         </select>
       </label>
-      <label className="field">
-        <span>Rahmenausgleich in Pixeln (Abstand zwischen den Bildflächen)</span>
-        <input
-          type="number"
-          min={0}
-          max={500}
-          defaultValue={wall.bezel}
-          onBlur={(e) => Number(e.target.value) !== wall.bezel && patch({ wallBezel: Math.max(0, Math.round(Number(e.target.value) || 0)) })}
-        />
-      </label>
+      {wall.mode === 'span' && (
+        <label className="field">
+          <span>Rahmenausgleich in Pixeln (Abstand zwischen den Bildflächen)</span>
+          <input
+            type="number"
+            min={0}
+            max={500}
+            defaultValue={wall.bezel}
+            onBlur={(e) => Number(e.target.value) !== wall.bezel && patch({ wallBezel: Math.max(0, Math.round(Number(e.target.value) || 0)) })}
+          />
+        </label>
+      )}
       <label className="field field--check">
         <input type="checkbox" checked={display.showProgress} onChange={(e) => patch({ showProgress: e.target.checked })} />
         Fortschrittsbalken
       </label>
       <label className="field field--check">
         <input type="checkbox" checked={display.soundAllowed} onChange={(e) => patch({ soundAllowed: e.target.checked })} />
-        Ton erlaubt (spielt nur auf dem Display oben links, sonst gibt es Echo)
+        Ton erlaubt (spielt nur auf einem Display, sonst gibt es Echo: oben links, im Stapel auf dem ersten)
       </label>
       <p className="muted modal__hint">Änderungen werden sofort gespeichert. {saved && <span className="saved">Gespeichert ✓</span>}</p>
     </div>

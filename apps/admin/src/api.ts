@@ -23,7 +23,8 @@ export interface Display {
   device: { ip: string; since: number } | null;
   /** "wall": a grid of displays showing one picture; it has no device itself. */
   kind: 'screen' | 'wall';
-  wall: { rows: number; cols: number; bezel: number; screens: number; online: number } | null;
+  /** mode: "span" one big picture, "stack" one slide per screen that moves on screen by screen. */
+  wall: { rows: number; cols: number; bezel: number; mode: 'span' | 'stack'; screens: number; online: number } | null;
   /** Set while this display is part of a wall. */
   wallId: string | null;
   wallRow: number | null;

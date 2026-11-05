@@ -65,6 +65,7 @@ const displayPatch = z.object({
   wallRows: wallSide.optional(),
   wallCols: wallSide.optional(),
   wallBezel: z.number().int().min(0).max(500).optional(),
+  wallMode: z.enum(['span', 'stack']).optional(),
 });
 const channelBody = z.object({
   name: z.string().min(1).max(200),
@@ -309,6 +310,7 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
                   rows: r.wall_rows,
                   cols: r.wall_cols,
                   bezel: r.wall_bezel,
+                  mode: r.wall_mode,
                   screens: screens.length,
                   online: screenStates.filter((s) => s === 'online').length,
                 }
@@ -408,11 +410,12 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
       | { kind: string; wall_rows: number | null; wall_cols: number | null }
       | undefined;
     if (!current) return c.json({ error: 'Nicht gefunden' }, 404);
-    const { wallRows, wallCols, wallBezel } = body.data;
-    if ((wallRows ?? wallCols ?? wallBezel) !== undefined && current.kind !== 'wall') return c.json({ error: 'Kein Wand-Display' }, 400);
+    const { wallRows, wallCols, wallBezel, wallMode } = body.data;
+    if ((wallRows ?? wallCols ?? wallBezel ?? wallMode) !== undefined && current.kind !== 'wall') return c.json({ error: 'Kein Wand-Display' }, 400);
     if (wallRows !== undefined) set('wall_rows', wallRows);
     if (wallCols !== undefined) set('wall_cols', wallCols);
     if (wallBezel !== undefined) set('wall_bezel', wallBezel);
+    if (wallMode !== undefined) set('wall_mode', wallMode);
     if (!fields.length) return c.json({ ok: true });
     set('updated_at', ctx.now());
     // Screens outside a smaller grid leave the wall (and play their own channel again).

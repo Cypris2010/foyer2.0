@@ -47,6 +47,17 @@ html, body {
 .foyer-stage[data-transition="slide"] .foyer-slide.is-active { transform: none; transition: transform 1.5s ease; }
 .foyer-stage[data-transition="slide"] .foyer-slide.is-leaving { transform: translateX(-100%); transition: transform 1.5s ease; }
 
+/* Stack wall: the slide leaves towards the next screen while the same slide comes in
+   there from this side, on the same clock, so it seems to move across the frame. */
+.foyer-stage[data-transition^="stack-"] .foyer-slide.is-active,
+.foyer-stage[data-transition^="stack-"] .foyer-slide.is-leaving { transition: transform 1.5s ease-in-out; }
+.foyer-stage[data-transition="stack-right"] .foyer-slide { transform: translateX(-100%); }
+.foyer-stage[data-transition="stack-right"] .foyer-slide.is-active { transform: none; }
+.foyer-stage[data-transition="stack-right"] .foyer-slide.is-leaving { transform: translateX(100%); }
+.foyer-stage[data-transition="stack-down"] .foyer-slide { transform: translateY(-100%); }
+.foyer-stage[data-transition="stack-down"] .foyer-slide.is-active { transform: none; }
+.foyer-stage[data-transition="stack-down"] .foyer-slide.is-leaving { transform: translateY(100%); }
+
 /* Credit line of imported media (CC BY etc.), above the slide content. */
 .foyer-credit {
   position: absolute;

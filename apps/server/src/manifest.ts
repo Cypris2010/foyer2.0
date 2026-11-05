@@ -5,6 +5,7 @@ import { slideServerContext } from './integrations.ts';
 import { activeChannelSlides, displayContent, minTime } from './planning.ts';
 import { mediaCredit, mediaFields, mediaInfo, resolveBackground, type ManifestBackground } from './background.ts';
 import type { MediaInfo } from '@foyer/slide-sdk';
+import { wallScreens } from './walls.ts';
 
 /** Seconds for single slides scheduled without a channel around them. */
 const DEFAULT_DURATION = 10;
@@ -21,6 +22,7 @@ export interface DisplayRow {
   wall_rows: number | null;
   wall_cols: number | null;
   wall_bezel: number;
+  wall_mode: 'span' | 'stack';
   wall_id: string | null;
   wall_row: number | null;
   wall_col: number | null;
@@ -28,7 +30,7 @@ export interface DisplayRow {
 
 /** Columns of DisplayRow, for SELECTs. */
 export const DISPLAY_COLUMNS =
-  'id, name, default_channel_id, show_progress, sound_allowed, orientation, networks, kind, wall_rows, wall_cols, wall_bezel, wall_id, wall_row, wall_col';
+  'id, name, default_channel_id, show_progress, sound_allowed, orientation, networks, kind, wall_rows, wall_cols, wall_bezel, wall_mode, wall_id, wall_row, wall_col';
 
 /** Where a display sits in its wall; the player shows only that part (wall.ts). */
 export interface ManifestWall {
@@ -41,6 +43,11 @@ export interface ManifestWall {
   bezel: number;
   /** Name of this screen (identify shows it, not the wall's). */
   screen: string;
+  /** span: one big picture; stack: one slide per screen, moving on screen by screen. */
+  mode: 'span' | 'stack';
+  /** Stack: this screen's place among the wall's screens (reading order) and their number. */
+  position: number;
+  screens: number;
 }
 
 interface ChannelRow {
@@ -254,6 +261,12 @@ export async function buildSlideEntry(
   return result;
 }
 
+/** A screen's place in a stack wall: empty cells don't count, so no slide gets lost in a gap. */
+function stackPlace(ctx: AppContext, wallId: string, screenId: string) {
+  const screens = wallScreens(ctx.db, wallId);
+  return { position: Math.max(0, screens.findIndex((s) => s.id === screenId)), screens: screens.length };
+}
+
 /**
  * Resolves the calendar (planning.ts) into the playlist of a display.
  * `preview` signs sandbox documents as "preview:<displayId>", so admins can
@@ -274,6 +287,8 @@ export async function buildManifest(ctx: AppContext, screen: DisplayRow, opts: {
         col: screen.wall_col ?? 0,
         bezel: wallRow.wall_bezel,
         screen: screen.name,
+        mode: wallRow.wall_mode,
+        ...stackPlace(ctx, wallRow.id, screen.id),
       }
     : null;
   const documentDisplayId = opts.preview ? `preview:${display.id}` : display.id;
@@ -321,8 +336,10 @@ export async function buildManifest(ctx: AppContext, screen: DisplayRow, opts: {
       name: display.name,
       showProgress: display.show_progress === 1,
       orientation: display.orientation,
-      // Admin previews stay silent; a wall sounds from its first screen only (no echo).
-      soundAllowed: !opts.preview && display.sound_allowed === 1 && (!wall || (wall.row === 0 && wall.col === 0)),
+      // Admin previews stay silent; a wall sounds from its first screen only (no echo),
+      // a stack from the screen that shows the new slide.
+      soundAllowed:
+        !opts.preview && display.sound_allowed === 1 && (!wall || (wall.mode === 'stack' ? wall.position === 0 : wall.row === 0 && wall.col === 0)),
     },
     channel: lead ? { id: lead.id, name: channels.map((c) => c.name).join(' + '), transition: lead.transition } : null,
     slides,

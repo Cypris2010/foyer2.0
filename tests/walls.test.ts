@@ -38,11 +38,22 @@ describe('Display-Wand', () => {
     const right = await manifestOf(second.token);
     expect(left.slides.map((s: any) => s.id)).toEqual(['s-text', 's-html']);
     expect(right.slides.map((s: any) => s.id)).toEqual(left.slides.map((s: any) => s.id));
-    expect(left.wall).toEqual({ id: wallId, name: 'Aula-Wand', rows: 1, cols: 2, row: 0, col: 0, bezel: 40, screen: 'Aula' });
+    expect(left.wall).toEqual({ id: wallId, name: 'Aula-Wand', rows: 1, cols: 2, row: 0, col: 0, bezel: 40, screen: 'Aula', mode: 'span', position: 0, screens: 2 });
     expect(right.wall).toMatchObject({ row: 0, col: 1, screen: 'Foyer' });
     // Ton nur auf dem ersten Bildschirm, sonst Echo.
     expect(left.display.soundAllowed).toBe(true);
     expect(right.display.soundAllowed).toBe(false);
+  });
+
+  it('stapelt Folien: jedes Display kennt seinen Platz, leere Felder zählen nicht', async () => {
+    const { app, admin, wallId, second, cells, manifestOf } = await wallSetup();
+    expect((await app.request(`/api/displays/${wallId}`, json('PATCH', { wallMode: 'stack', wallRows: 2, wallCols: 2 }, admin))).status).toBe(200);
+    await cells([['d1', 1, 0], [second.id, 0, 1]]);
+    expect((await manifestOf(second.token)).wall).toMatchObject({ mode: 'stack', position: 0, screens: 2 });
+    const list = await (await app.request('/api/displays', { headers: { cookie: admin } })).json();
+    expect(list.find((d: any) => d.id === wallId).wall).toMatchObject({ mode: 'stack', screens: 2 });
+    // Nur Wände haben einen Modus.
+    expect((await app.request('/api/displays/d1', json('PATCH', { wallMode: 'stack' }, admin))).status).toBe(400);
   });
 
   it('prüft das Raster', async () => {

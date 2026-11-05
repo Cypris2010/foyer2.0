@@ -5,6 +5,7 @@ import { renderers } from './registry.ts';
 import type { Manifest, ManifestSlide } from './types.ts';
 import { mountBackground, type BackgroundControl } from './background.ts';
 import { keepVideosOnClock, seekVideos, slotAt, type Slot } from './timeline.ts';
+import type { Stack } from './wall.ts';
 
 const TRANSITION_MS = 1500;
 // Joining a slide that already runs: seek media only when clearly behind.
@@ -53,6 +54,8 @@ export class Ticker {
   private stopVideoSync = () => {};
   /** Live preview: slides change only when follow() is called, never by timer. */
   private following = false;
+  /** Screen of a stack wall: shows the slide `position` places behind the timeline. */
+  private stack: Stack | null = null;
   private readonly stage: HTMLElement;
   private readonly progress: HTMLElement;
   private readonly hooks: TickerHooks;
@@ -81,6 +84,19 @@ export class Ticker {
 
   get displayName(): string {
     return this.manifest?.display.name ?? '';
+  }
+
+  /**
+   * Stack wall: every screen keeps the timeline (all of them change together)
+   * but shows an older slide, so each slide moves on one screen per change.
+   */
+  setStack(stack: Stack | null) {
+    if (stack?.position === this.stack?.position && stack?.direction === this.stack?.direction) return;
+    this.stack = stack;
+    if (this.manifest) this.applyTransition(this.manifest);
+    // Another place in the stack: show the right slide now, not at the next change.
+    this.slot = null;
+    if (this.manifest) this.schedule();
   }
 
   /** New manifests take effect at the next slide boundary, never mid-slide. */
@@ -141,7 +157,7 @@ export class Ticker {
   resync() {
     if (this.following || !this.manifest) return;
     const slot = slotAt(this.durations(), this.clock());
-    if (slot && !this.pending && this.current && this.current.slide.id === this.slides[slot.index]?.id) {
+    if (slot && !this.pending && this.current && this.current.slide.id === this.slides[this.slideIndex(slot)]?.id) {
       // Same slide on screen: only its end moves, nothing restarts.
       clearTimeout(this.timer);
       this.slot = slot;
@@ -160,8 +176,19 @@ export class Ticker {
       if (!renderers.has(slide.type)) this.hooks.onError(`Unbekannter Folientyp: ${slide.type}`);
       return !slide.error && renderers.has(slide.type);
     });
-    this.stage.setAttribute('data-transition', manifest.channel?.transition ?? 'fade');
+    this.applyTransition(manifest);
     this.progress.hidden = !manifest.display.showProgress;
+  }
+
+  // A stack moves its slides on to the next screen, whatever the channel says.
+  private applyTransition(manifest: Manifest) {
+    this.stage.setAttribute('data-transition', this.stack ? `stack-${this.stack.direction}` : (manifest.channel?.transition ?? 'fade'));
+  }
+
+  /** The slide a slot shows here: in a stack, the one `position` places earlier. */
+  private slideIndex(slot: Slot): number {
+    const count = this.slides.length;
+    return this.stack ? (((slot.index - this.stack.position) % count) + count) % count : slot.index;
   }
 
   private durations() {
@@ -185,10 +212,10 @@ export class Ticker {
   };
 
   private play(slot: Slot) {
-    this.index = slot.index;
+    this.index = this.slideIndex(slot);
     this.slot = slot;
     // A slide that fails to render leaves the previous one on screen for this slot.
-    this.show(this.slides[slot.index], Math.min(slot.start, this.clock()), slot.end);
+    this.show(this.slides[this.index], Math.min(slot.start, this.clock()), slot.end);
     this.timer = setTimeout(this.schedule, Math.max(0, slot.end - this.clock()));
   }
 
@@ -290,9 +317,10 @@ export class Ticker {
       timeZone: this.manifest.settings.timeZone,
       displayName: this.manifest.display.name,
       soundAllowed: this.manifest.display.soundAllowed === true,
-      // While following, only the real display decides when a slide ends.
+      // While following, only the real display decides when a slide ends; in a
+      // stack only the timeline, or one screen would move on without the others.
       done: () => {
-        if (this.current?.key === key && !this.following) this.finishEarly();
+        if (this.current?.key === key && !this.following && !this.stack) this.finishEarly();
       },
       reportError: (error) => this.hooks.onError(`${slide.title}: ${String((error as Error)?.message ?? error)}`),
     };

@@ -178,6 +178,11 @@ const migrations: Array<string | ((db: DatabaseSync) => void)> = [
   ALTER TABLE displays ADD COLUMN wall_col INTEGER;
   CREATE UNIQUE INDEX displays_wall_cell ON displays (wall_id, wall_row, wall_col) WHERE wall_id IS NOT NULL;
   `,
+  // Wall modes: "span" shows one big picture across all screens; "stack" shows
+  // one slide per screen, and on every change each slide moves on to the next screen.
+  `
+  ALTER TABLE displays ADD COLUMN wall_mode TEXT NOT NULL DEFAULT 'span' CHECK (wall_mode IN ('span', 'stack'));
+  `,
 ];
 
 export type Db = DatabaseSync;

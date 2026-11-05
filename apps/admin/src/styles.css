@@ -99,6 +99,9 @@ button.filter.is-active { color: var(--text); font-weight: 600; }
 .display-card__thumb .thumb--landscape { width: 100%; }
 .display-card__thumb .thumb--portrait { width: auto; height: 100%; }
 .display-card__thumb .thumb--wall { width: auto !important; height: 100%; max-width: 100%; }
+.stack-thumb { display: grid; gap: 3px; height: 100%; max-width: 100%; }
+.stack-thumb .thumb { width: 100%; height: 100%; aspect-ratio: auto; border-radius: 3px; }
+.stack-thumb__empty { border: 1px dashed var(--border); border-radius: 3px; }
 .display-card__title { padding: 0; border: 0; background: none; font: inherit; color: var(--accent); text-align: left; }
 .display-card__title:hover { text-decoration: underline; }
 .display-card__info { display: grid; grid-template-columns: auto 1fr; gap: 0.3rem 0.5rem; margin: 0; align-content: start; }

@@ -7,6 +7,9 @@
 //   /p/<token>                 normal player; jumps to ?wall when the manifest says so
 //   /p/<token>?wall            shell (top level)
 //   /p/<token>?frame=wall&…    player inside the shell; reports the wall to it
+//
+// A stack wall needs none of this: each screen is a normal player that shows
+// the slides a few places behind the first screen (ticker.ts, setStack).
 import type { Manifest } from './types.ts';
 
 export type Wall = NonNullable<Manifest['wall']>;
@@ -26,10 +29,26 @@ export const isWallShell = query.has('wall') && !inWallFrame;
 /** Session id handed down by the shell, so shell and frame count as one device. */
 export const frameSession = inWallFrame ? query.get('session') : null;
 
-/** Called with every manifest: switches between normal player and wall. */
+/** The wall shows one big picture across its screens (not a stack). */
+export function spans(wall: Wall | null | undefined): wall is Wall {
+  return !!wall && wall.mode !== 'stack';
+}
+
+export interface Stack {
+  /** Places behind the first screen (reading order). */
+  position: number;
+  /** Where the next screen is: a single column moves down, everything else to the right. */
+  direction: 'down' | 'right';
+}
+
+export function stackOf(wall: Wall): Stack {
+  return { position: wall.position ?? 0, direction: wall.cols === 1 && wall.rows > 1 ? 'down' : 'right' };
+}
+
+/** Called with every manifest: switches between normal player and wall shell. */
 export function followWall(wall: Wall | null | undefined) {
-  if (inWallFrame) post({ foyer: 'wall', wall: wall ?? null });
-  else if (wall) location.replace(`${location.pathname}?wall`);
+  if (inWallFrame) post({ foyer: 'wall', wall: spans(wall) ? wall : null });
+  else if (spans(wall)) location.replace(`${location.pathname}?wall`);
 }
 
 /** Overlays belong on the screen itself, not somewhere on the big wall canvas. */
