@@ -1,7 +1,8 @@
 import './styles.css';
-import { clearCachedManifest, endpointsFromPath, fetchManifest, fetchServerTime, HttpError, loadCachedManifest, postJson, storeManifest } from './api.ts';
+import { clearCachedManifest, endpointsFromPath, fetchManifest, fetchServerTime, HttpError, loadCachedManifest, postJson, sessionId, storeManifest } from './api.ts';
 import { Ticker } from './ticker.ts';
 import { ServerClock } from './clock.ts';
+import { followWall, inWallFrame, isWallShell, reloadScreen, runWallShell, wallOverlay, type Wall } from './wall.ts';
 import { withSlideData, withoutSlideData } from './data.ts';
 import { createUpdateCheck } from './update.ts';
 import type { Manifest } from './types.ts';
@@ -26,9 +27,16 @@ const badge = document.getElementById('badge')!;
 
 function showOverlay(text: string, ms?: number) {
   overlay.textContent = text;
-  overlay.hidden = false;
+  overlay.hidden = !text;
   if (ms) setTimeout(() => (overlay.hidden = true), ms);
 }
+
+// Inside a wall the shell shows overlays, on this screen only.
+const notice = (text: string, ms?: number) => wallOverlay(text, ms) || showOverlay(text, ms);
+const hideNotice = () => {
+  overlay.hidden = true;
+  wallOverlay('');
+};
 
 const errors: string[] = [];
 function recordError(message: string) {
@@ -40,7 +48,11 @@ function recordError(message: string) {
 const endpoints = endpointsFromPath(location.pathname);
 if (!endpoints) {
   showOverlay('Ungültige Player-Adresse');
+} else if (isWallShell && endpoints.mode === 'display') {
+  runWallShell(sessionId, overlay, showOverlay);
 } else {
+  /** Set while this screen is part of a wall (from the manifest). */
+  let wall: Wall | null = null;
   /** active: holds the display; blocked: busy elsewhere, not allowed, or released. */
   let active = false;
   let pausedUntil = 0;
@@ -63,14 +75,17 @@ if (!endpoints) {
     onError: recordError,
     onSlideChange: () => {
       // New Foyer version on the server: reload between slides, never mid-slide.
-      if (update.due) return location.reload();
+      if (update.due) return reloadScreen();
       reportNowPlaying();
     },
   }, now);
   if (clock) clock.onShift = () => ticker.resync();
 
   const cached = loadCachedManifest(endpoints.cacheKey);
-  if (cached) ticker.setManifest(withoutSlideData(cached));
+  // Part of a wall (cold start): straight into the wall shell.
+  const leaving = cached?.wall && !inWallFrame && endpoints.mode === 'display';
+  if (leaving) followWall(cached.wall);
+  else if (cached) ticker.setManifest(withoutSlideData(cached));
 
   // Only while holding the display: every player request also claims it.
   const syncClock = async () => {
@@ -88,7 +103,7 @@ if (!endpoints) {
     source?.close();
     source = null;
     ticker.clear();
-    showOverlay(message);
+    notice(message);
   };
 
   // Live preview: mirror the real display, or play the plan while it is offline.
@@ -116,12 +131,18 @@ if (!endpoints) {
       if (Date.now() < pausedUntil) return;
       const wasActive = active;
       active = true;
-      overlay.hidden = true;
+      hideNotice();
+      if (endpoints.mode === 'display') {
+        wall = manifest.wall ?? null;
+        followWall(wall);
+        // Joined a wall: the shell takes over from here.
+        if (wall && !inWallFrame) return;
+      }
       // Started from the cache, the first slide went unreported.
       if (!wasActive && ticker.currentSlideId) reportNowPlaying();
       update.check(manifest.playerBuild);
       // Nothing on screen: no boundary to wait for.
-      if (update.due && !ticker.currentSlideId) return location.reload();
+      if (update.due && !ticker.currentSlideId) return reloadScreen();
       ticker.setManifest(manifest);
       if (endpoints.mode === 'live') followDisplay(manifest);
       if (!wasActive) {
@@ -157,8 +178,10 @@ if (!endpoints) {
     if (endpoints.mode === 'display') {
       // Connected again (e.g. after a server restart, which forgets what we show).
       source.addEventListener('hello', reportNowPlaying);
-      source.addEventListener('reload', () => location.reload());
-      source.addEventListener('identify', () => showOverlay(ticker.displayName || 'Foyer', 10_000));
+      source.addEventListener('reload', reloadScreen);
+      source.addEventListener('identify', () =>
+        notice(wall ? `${wall.screen} · ${wall.name}, Zeile ${wall.row + 1}, Spalte ${wall.col + 1}` : ticker.displayName || 'Foyer', 10_000),
+      );
       source.addEventListener('released', () => {
         block('Dieses Display wurde für ein anderes Gerät freigegeben.');
         pausedUntil = Date.now() + RELEASED_PAUSE_MS;
@@ -198,6 +221,6 @@ if (!endpoints) {
     setTimeout(heartbeat, 3000);
     setInterval(heartbeat, HEARTBEAT_MS);
     setInterval(syncClock, HEARTBEAT_MS);
-    setTimeout(() => location.reload(), FULL_RELOAD_MS);
+    setTimeout(reloadScreen, FULL_RELOAD_MS);
   }
 }

@@ -21,6 +21,13 @@ export interface Display {
   currentSlideTitle: string | null;
   /** The one device currently holding this display. */
   device: { ip: string; since: number } | null;
+  /** "wall": a grid of displays showing one picture; it has no device itself. */
+  kind: 'screen' | 'wall';
+  wall: { rows: number; cols: number; bezel: number; screens: number; online: number } | null;
+  /** Set while this display is part of a wall. */
+  wallId: string | null;
+  wallRow: number | null;
+  wallCol: number | null;
 }
 
 export interface Channel {

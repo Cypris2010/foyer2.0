@@ -157,6 +157,20 @@ const migrations: Array<string | ((db: DatabaseSync) => void)> = [
   `,
   // Sound only on displays that allow it, e.g. the hall, not the corridors (KONZEPT 6.2).
   `ALTER TABLE displays ADD COLUMN sound_allowed INTEGER NOT NULL DEFAULT 0;`,
+  // Display walls: a display of kind "wall" has channel and calendar like any
+  // other, but no device of its own; normal displays fill the cells of its grid
+  // (wall_id/row/col) and each shows its part of the wall. bezel: px between
+  // the picture areas of neighbouring screens (hidden behind the frames).
+  `
+  ALTER TABLE displays ADD COLUMN kind TEXT NOT NULL DEFAULT 'screen' CHECK (kind IN ('screen', 'wall'));
+  ALTER TABLE displays ADD COLUMN wall_rows INTEGER;
+  ALTER TABLE displays ADD COLUMN wall_cols INTEGER;
+  ALTER TABLE displays ADD COLUMN wall_bezel INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE displays ADD COLUMN wall_id TEXT REFERENCES displays(id) ON DELETE SET NULL;
+  ALTER TABLE displays ADD COLUMN wall_row INTEGER;
+  ALTER TABLE displays ADD COLUMN wall_col INTEGER;
+  CREATE UNIQUE INDEX displays_wall_cell ON displays (wall_id, wall_row, wall_col) WHERE wall_id IS NOT NULL;
+  `,
 ];
 
 export type Db = DatabaseSync;

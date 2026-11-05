@@ -1,4 +1,5 @@
 import type { Manifest } from './types.ts';
+import { frameSession } from './wall.ts';
 
 export interface Endpoints {
   /** display: a real screen; preview: one slide; live: follows a real display. */
@@ -54,7 +55,8 @@ export function endpointsFromPath(pathname: string): Endpoints | null {
 }
 
 // Random per page load; the server allows one session per display (one device).
-export const sessionId = (() => {
+// Inside a wall shell the shell's id, so both count as the same device.
+export const sessionId = frameSession ?? (() => {
   const bytes = new Uint8Array(16);
   if (typeof crypto !== 'undefined' && crypto.getRandomValues) crypto.getRandomValues(bytes);
   else for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);

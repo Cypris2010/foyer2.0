@@ -67,6 +67,12 @@ Bilder und Videos lädt man im Admin unter **Medien** hoch und nutzt sie als Fol
 
 Die Dateien liegen unter `FOYER_DATA_DIR/media` (`originals/` für die Uploads, `files/` für die umgewandelten Dateien mit Inhalts-Hash im Namen). Ausgeliefert werden sie unter `/media/…` nur ins Schulnetz (`FOYER_PLAYER_NETWORKS`) und an angemeldete Benutzer. Dateien, die eine Folie noch nutzt, lassen sich nicht löschen.
 
+### Synchrone Displays und Display-Wände
+
+Alle Displays laufen auf der Uhr des Servers (`/api/player/…/time`, abgeglichen beim Start und alle 30 s). Welche Folie läuft, ergibt sich allein aus der Uhrzeit: Displays mit demselben Programm schalten gleichzeitig um, ein neu gestartetes Display steigt mitten in der laufenden Folie ein, Videos werden über die Abspielgeschwindigkeit an der Uhr gehalten.
+
+Eine **Wand** (Admin → Displays → „Wand anlegen“) ist ein Raster aus bis zu 4 × 4 Feldern, in das man vorhandene Displays legt. Channel und Kalender bekommt die Wand; die Displays darin zeigen jeweils ihren Ausschnitt eines großen Bildes und behalten ihre URL. Der Player lädt sich dafür als iframe in Wandgröße (die Folien passen ihr Layout an das Wandformat an, z. B. 32:9 oder 8:9) und zeigt nur sein Feld. Der Rahmenausgleich vergrößert das Bild um die Rahmen zwischen den Bildschirmen, damit Linien gerade durchlaufen. Ton spielt nur das Display oben links. Nimmt man ein Display aus der Wand, zeigt es wieder seinen eigenen Channel.
+
 ### WebUntis: Raumanzeige und Lehrkräfte-Dashboard
 
 Die beiden Folien sind 1:1 aus wp-foyer übernommen (gleiche Darstellung, Beschriftungen und Optionen). Neu ist, wo die Daten herkommen:

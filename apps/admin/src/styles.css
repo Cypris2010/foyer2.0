@@ -234,3 +234,13 @@ main { padding: 1.25rem; max-width: 1400px; margin: 0 auto; }
 .qr-art__status { margin: 0; font-size: 0.85rem; max-width: 42ch; }
 .qr-art__status--ok { color: #15803d; }
 .qr-art__status--bad { color: #b91c1c; }
+
+/* Display walls */
+.wall-card { grid-column: span 2; }
+@media (max-width: 720px) { .wall-card { grid-column: auto; } }
+.display-card .thumb--wall { height: auto; margin: 0 auto; }
+.thumb__seams { position: absolute; inset: 0; display: grid; pointer-events: none; }
+.thumb__seams span { outline: 1px dashed rgba(255, 255, 255, 0.45); }
+.wall-grid { display: grid; gap: 0.5rem; }
+.wall-grid__cell { display: flex; flex-direction: column; gap: 0.25rem; padding: 0.5rem; border: 1px solid var(--border); border-radius: 6px; font-size: 0.85rem; }
+.wall-grid__cell.is-empty { border-style: dashed; }

@@ -14,6 +14,14 @@ html, body {
 }
 * { box-sizing: border-box; }
 
+/* Wall shell (wall.ts): the player for the whole wall, moved so this screen's part shows. */
+.foyer-wall-frame {
+  position: fixed;
+  top: 0; left: 0;
+  border: 0;
+  transform-origin: 0 0;
+}
+
 .foyer-stage {
   position: fixed;
   top: 0; right: 0; bottom: 0; left: 0;

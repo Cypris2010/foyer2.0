@@ -16,6 +16,30 @@ export interface DisplayRow {
   orientation: 'landscape' | 'portrait';
   networks: string;
   sound_allowed: number;
+  kind: 'screen' | 'wall';
+  wall_rows: number | null;
+  wall_cols: number | null;
+  wall_bezel: number;
+  wall_id: string | null;
+  wall_row: number | null;
+  wall_col: number | null;
+}
+
+/** Columns of DisplayRow, for SELECTs. */
+export const DISPLAY_COLUMNS =
+  'id, name, default_channel_id, show_progress, sound_allowed, orientation, networks, kind, wall_rows, wall_cols, wall_bezel, wall_id, wall_row, wall_col';
+
+/** Where a display sits in its wall; the player shows only that part (wall.ts). */
+export interface ManifestWall {
+  id: string;
+  name: string;
+  rows: number;
+  cols: number;
+  row: number;
+  col: number;
+  bezel: number;
+  /** Name of this screen (identify shows it, not the wall's). */
+  screen: string;
 }
 
 interface ChannelRow {
@@ -67,6 +91,8 @@ export interface Manifest {
   settings: { locale: string; timeZone: string };
   /** Player bundle the server serves; outdated players reload (not part of `version`). */
   playerBuild: string | null;
+  /** Set when the display is part of a wall: it plays the wall's content. */
+  wall: ManifestWall | null;
 }
 
 const dataCache = new Map<string, { value: unknown; expires: number }>();
@@ -227,7 +253,23 @@ export async function buildSlideEntry(
  * `preview` signs sandbox documents as "preview:<displayId>", so admins can
  * view them from outside the player networks (they hold no personal data).
  */
-export async function buildManifest(ctx: AppContext, display: DisplayRow, opts: { preview?: boolean } = {}): Promise<Manifest> {
+export async function buildManifest(ctx: AppContext, screen: DisplayRow, opts: { preview?: boolean } = {}): Promise<Manifest> {
+  // Part of a wall: the wall's channel, calendar and settings; every screen of
+  // it gets the same playlist, so all of them run on the same timeline.
+  const wallRow = screen.wall_id ? (ctx.db.prepare(`SELECT ${DISPLAY_COLUMNS} FROM displays WHERE id = ?`).get(screen.wall_id) as DisplayRow | undefined) : undefined;
+  const display = wallRow ?? screen;
+  const wall: ManifestWall | null = wallRow
+    ? {
+        id: wallRow.id,
+        name: wallRow.name,
+        rows: wallRow.wall_rows ?? 1,
+        cols: wallRow.wall_cols ?? 1,
+        row: screen.wall_row ?? 0,
+        col: screen.wall_col ?? 0,
+        bezel: wallRow.wall_bezel,
+        screen: screen.name,
+      }
+    : null;
   const documentDisplayId = opts.preview ? `preview:${display.id}` : display.id;
   const now = ctx.now();
   const content = displayContent(ctx.db, display.id, display.default_channel_id, now, ctx.timeZone);
@@ -273,13 +315,14 @@ export async function buildManifest(ctx: AppContext, display: DisplayRow, opts: 
       name: display.name,
       showProgress: display.show_progress === 1,
       orientation: display.orientation,
-      // Admin previews stay silent.
-      soundAllowed: !opts.preview && display.sound_allowed === 1,
+      // Admin previews stay silent; a wall sounds from its first screen only (no echo).
+      soundAllowed: !opts.preview && display.sound_allowed === 1 && (!wall || (wall.row === 0 && wall.col === 0)),
     },
     channel: lead ? { id: lead.id, name: channels.map((c) => c.name).join(' + '), transition: lead.transition } : null,
     slides,
     nextChange: nextChange === null ? null : new Date(nextChange).toISOString(),
     settings: { locale: ctx.locale, timeZone: ctx.timeZone },
+    wall,
   };
   return { version: sha256(JSON.stringify(body)).slice(0, 16), generatedAt: new Date(now).toISOString(), ...body, playerBuild: ctx.playerBuild() };
 }
