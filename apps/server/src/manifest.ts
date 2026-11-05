@@ -1,8 +1,9 @@
 // Resolves what a display shows right now and packs it into the player manifest.
 import type { AppContext } from './context.ts';
 import { hmac, sha256 } from './crypto.ts';
+import { slideServerContext } from './integrations.ts';
 import { activeChannelSlides, displayContent, minTime } from './planning.ts';
-import { mediaFields, mediaInfo, resolveBackground, type ManifestBackground } from './background.ts';
+import { mediaCredit, mediaFields, mediaInfo, resolveBackground, type ManifestBackground } from './background.ts';
 import type { MediaInfo } from '@foyer/slide-sdk';
 
 /** Seconds for single slides scheduled without a channel around them. */
@@ -77,6 +78,8 @@ export interface ManifestSlide {
   media: Record<string, MediaInfo>;
   /** Duration is the media length: the slide ends when the media ends (timer is a safety net). */
   playsToEnd: boolean;
+  /** Credit lines of imported media the slide shows (license terms); absent when none. */
+  credits?: string[];
   error?: string;
 }
 
@@ -110,7 +113,7 @@ async function resolveData(ctx: AppContext, slide: SlideRow, config: unknown, di
   if (cached && cached.expires > now) return cached.value;
   const refresh = entry.server.refreshSeconds;
   const ttlSeconds = typeof refresh === 'function' ? refresh(config) : (refresh ?? Infinity);
-  const value = await entry.server.data(config, { displayId, locale: ctx.locale, timeZone: ctx.timeZone });
+  const value = await entry.server.data(config, slideServerContext(ctx, displayId));
   dataCache.set(key, { value, expires: now + ttlSeconds * 1000 });
   return value;
 }
@@ -227,6 +230,9 @@ export async function buildSlideEntry(
     }
     result.media[id] = info;
   }
+  const backgroundId = result.background && result.background.kind !== 'color' ? (JSON.parse(slide.background_json!) as { mediaId?: string }).mediaId : undefined;
+  const credits = [...new Set([backgroundId, ...Object.keys(result.media)].map((id) => (id ? mediaCredit(ctx, id) : null)).filter((c): c is string => !!c))];
+  if (credits.length) result.credits = credits;
   const lengthField = entry.definition.durationFromMedia;
   const length = lengthField ? result.media[config[lengthField] as string]?.duration : null;
   if (slide.duration === null && length) {

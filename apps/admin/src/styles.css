@@ -91,6 +91,8 @@ main { padding: 1.25rem; max-width: 1400px; margin: 0 auto; }
 .display-card .thumb--portrait { width: auto; height: 180px; margin: 0 auto; }
 .display-card .thumb--landscape { height: 180px; width: 100%; }
 .saved { color: var(--ok); font-size: 0.85rem; }
+.checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+.checks .muted { font-size: 0.85rem; margin-left: 2.1rem; }
 .settings { border-top: 1px solid var(--border); padding-top: 0.5rem; }
 .settings summary { cursor: pointer; color: var(--muted); }
 .settings[open] summary { margin-bottom: 0.75rem; }
@@ -235,6 +237,29 @@ main { padding: 1.25rem; max-width: 1400px; margin: 0 auto; }
 .qr-art__status--ok { color: #15803d; }
 .qr-art__status--bad { color: #b91c1c; }
 
+/* Image databases (StockSearch.tsx, Settings.tsx) */
+.stock { display: grid; gap: 0.25rem; }
+.stock__sources { margin-top: 0; }
+.stock__kinds { display: inline-flex; gap: 0.5rem; margin-left: auto; }
+.stock__form { margin: 0.25rem 0; }
+.stock__form input { flex: 1; min-width: 200px; }
+.stock__terms { font-size: 0.85rem; margin: 0 0 0.5rem; }
+.stock-grid { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 0.75rem; }
+.stock-hit { display: flex; flex-direction: column; gap: 0.25rem; padding: 0.4rem; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); min-width: 0; }
+.stock-hit__title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stock-hit__meta { font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stock-hit__license { display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; font-size: 0.8rem; }
+.stock-hit > button { margin-top: auto; }
+/* The picker opens inside .media-field, whose small thumbnail must not apply here. */
+.stock-hit .media-thumb { width: 100%; }
+.stock-hit__error { font-size: 0.8rem; }
+.credit-toggle { margin-top: 0.75rem; }
+.credit-preview { margin: 0.25rem 0; padding: 0.3rem 0.6rem; border-radius: 6px; background: #0f172a; color: #e2e8f0; font-size: 0.85rem; }
+.card--wide { grid-column: 1 / -1; }
+.media-source { border-top: 1px solid var(--border); padding-top: 0.75rem; display: grid; gap: 0.4rem; }
+.media-source header { justify-content: flex-start; }
+.media-source header .badge { margin-left: auto; }
+.media-source p { margin: 0; }
 /* Display walls */
 .wall-card { grid-column: span 2; }
 @media (max-width: 720px) { .wall-card { grid-column: auto; } }

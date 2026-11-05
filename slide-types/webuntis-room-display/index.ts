@@ -2,11 +2,11 @@ import { z } from 'zod';
 import { defineSlideType } from '@foyer/slide-sdk';
 
 export const config = z.object({
-  // No built-in address: each school configures its own export (KONZEPT 3.4).
+  // No built-in address (KONZEPT 3.4): empty uses the WebUntis API from the settings.
   source: z
     .union([z.url({ protocol: /^https?$/ }), z.literal('')])
     .default('')
-    .describe('Datenquelle (TXT-Adresse, Pipe-getrennte Untis-Liste raeume_ganzer_tag.txt)'),
+    .describe('Datenquelle: leer = WebUntis-API aus den Einstellungen, sonst Adresse eines Untis-TXT-Exports (raeume_ganzer_tag.txt)'),
   rooms: z
     .array(z.string().min(1).max(100))
     .max(50)
@@ -30,7 +30,7 @@ export interface RoomDisplayData {
 export default defineSlideType({
   id: 'webuntis-room-display',
   name: 'Raumanzeige (WebUntis)',
-  description: 'Aktuelle und nächste Belegungen ausgewählter Räume aus dem Untis-Export.',
+  description: 'Aktuelle und nächste Belegungen ausgewählter Räume aus WebUntis.',
   category: 'school',
   config,
   backgrounds: false,

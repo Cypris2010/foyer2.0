@@ -20,6 +20,8 @@ export interface ManifestSlide {
   background: Background | null;
   media: Record<string, MediaInfo>;
   playsToEnd: boolean;
+  /** Credit lines of imported media (license terms), shown in a corner. */
+  credits?: string[];
   error?: string;
 }
 

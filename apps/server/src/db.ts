@@ -157,6 +157,13 @@ const migrations: Array<string | ((db: DatabaseSync) => void)> = [
   `,
   // Sound only on displays that allow it, e.g. the hall, not the corridors (KONZEPT 6.2).
   `ALTER TABLE displays ADD COLUMN sound_allowed INTEGER NOT NULL DEFAULT 0;`,
+  // Imports from image databases: author, source and license (media-sources.ts),
+  // and whether displays show the credit line.
+  `
+  ALTER TABLE media ADD COLUMN source_json TEXT;
+  ALTER TABLE media ADD COLUMN show_credit INTEGER NOT NULL DEFAULT 0;
+  CREATE INDEX media_source ON media (json_extract(source_json, '$.provider'), json_extract(source_json, '$.id')) WHERE source_json IS NOT NULL;
+  `,
   // Display walls: a display of kind "wall" has channel and calendar like any
   // other, but no device of its own; normal displays fill the cells of its grid
   // (wall_id/row/col) and each shows its part of the wall. bezel: px between

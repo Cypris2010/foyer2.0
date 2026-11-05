@@ -2,7 +2,7 @@
 import { z } from 'zod';
 import type { BackgroundKind, MediaInfo } from '@foyer/slide-sdk';
 import type { AppContext } from './context.ts';
-import { mediaUrl, type MediaVariant } from './media.ts';
+import { creditText, mediaUrl, type MediaSource, type MediaVariant } from './media.ts';
 
 /** Darkens the background so text on top stays readable, in percent. */
 const dim = z.number().int().min(0).max(80).default(0);
@@ -63,6 +63,13 @@ export function mediaInfo(ctx: AppContext, id: string): MediaInfo | 'pending' | 
     height: main.height,
     duration: media.duration_s,
   };
+}
+
+/** Credit line the displays show with a media item (imported, credit switched on). */
+export function mediaCredit(ctx: AppContext, id: string): string | null {
+  const media = ctx.media.get(id);
+  if (!media?.show_credit || !media.source_json) return null;
+  return creditText(media.kind, JSON.parse(media.source_json) as MediaSource);
 }
 
 /** Names of config fields that hold a media id (`.meta({ widget: 'media' })`). */
