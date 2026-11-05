@@ -11,6 +11,7 @@ Eigenständige Digital-Signage-Lösung für Schulen: Neubau von [wp-foyer](https
 |---|---|
 | `apps/probe` | Diagnoseseite + Mini-Server für Gerätetests (ohne Abhängigkeiten) |
 | `apps/server` | API, Schedule-Auflösung, Player-Manifest, Live-Updates |
+| `apps/live-gateway` | Live-Gateway für Live-Folien (MediaMTX, ffmpeg, optional NDI), eigener Container |
 | `apps/player` | Player für die Displays (kleines Bundle, ES2017) |
 | `apps/admin` | Verwaltungsoberfläche |
 | `packages/slide-sdk` | Vertrag für Folientypen |
@@ -57,6 +58,66 @@ Konfiguration über Umgebungsvariablen (siehe `apps/server/src/config.ts`):
 | `FOYER_TIMEZONE` / `FOYER_LOCALE` | `Europe/Berlin` / `de-DE` | Zeitzone und Sprache |
 | `FOYER_MEDIA_MAX_MB` | `2048` | Größte erlaubte Upload-Datei |
 | `FOYER_FFMPEG` / `FOYER_FFPROBE` | `ffmpeg` / `ffprobe` | Pfade, falls nicht im `PATH` |
+| `FOYER_LIVE_GATEWAY` | – | Adresse des Live-Gateways, z. B. `http://127.0.0.1:8190`; ohne sie gibt es keine Live-Folien |
+| `FOYER_LIVE_GATEWAY_KEY` | – | Gemeinsamer Schlüssel mit dem Gateway (mindestens 32 Zeichen, `openssl rand -hex 32`) |
+
+### Live-Video
+
+Die Folie **Live-Video** zeigt eine NDI-Quelle oder eine Stream-Adresse (RTSP-Kamera, SRT, RTMP, HLS, UDP) mit unter einer Sekunde Verzögerung. Im Admin wählt man bei NDI die Quelle über „Quellen suchen“ aus der Liste der Quellen, die das Gateway sieht.
+
+- **Weg zum Display:** WebRTC. Die Geräte-Probe hat auf Airtame 2 gemessen, dass das sauber läuft (720p30: 0,7 % verworfene Bilder), HLS über MediaSource dagegen nicht. Standard ist deshalb **720p30**; 1080p30 geht, verliert auf Airtame aber ca. 5 % der Bilder.
+- **Live-Gateway** ([`apps/live-gateway`](apps/live-gateway)): ein eigener Dienst und Container neben Foyer. Dort wandelt [MediaMTX](https://github.com/bluenviron/mediamtx) mit ffmpeg jede Quelle in H.264 Baseline (+ Opus bei „Mit Ton“) um. Mehrere Folien mit derselben Quelle teilen sich eine Umwandlung, und sie läuft nur, solange ein Display oder eine Vorschau zuschaut (danach noch 30 s). Das Gateway kann auf demselben Server laufen oder auf einem Rechner im AV-Netz, wo es alle NDI-Quellen direkt sieht.
+- **Zugriff:** Die Displays holen das Bild über eine signierte Adresse aus ihrem Manifest, nur aus den Schulnetzen; Admin-Vorschauen brauchen eine Anmeldung. Foyer prüft das und reicht die Anfrage mit der Quelle der Folie an das Gateway weiter (Port 8190, nur mit `FOYER_LIVE_GATEWAY_KEY`). Das Bild selbst geht direkt vom Gateway über den Bild-Port `FOYER_LIVE_PORT` zum Display.
+- **Fällt die Quelle oder das Gateway aus**, zeigt die Folie „Live-Bild nicht verfügbar · neuer Versuch …“ und verbindet neu, sobald beide zurück sind (oder überspringt die Folie, je nach Einstellung).
+- **Firewall:** Displays → Gateway **8189 UDP** (oder TCP), Foyer-Server → Gateway **8190 TCP**. Bei NDI zusätzlich Gateway ↔ NDI-Quellen (mDNS 5353 UDP, NDI 5960 ff. TCP).
+
+Einstellungen des Gateways (siehe `apps/live-gateway/src/config.ts`):
+
+| Variable | Standard | Zweck |
+|---|---|---|
+| `FOYER_LIVE_GATEWAY_KEY` | – | Derselbe Schlüssel wie bei Foyer; ohne ihn startet das Gateway nicht |
+| `FOYER_GATEWAY_HOST` / `FOYER_GATEWAY_PORT` | `127.0.0.1` / `8190` | Schnittstelle für Foyer; auf einem eigenen Rechner `0.0.0.0` und per Firewall auf den Foyer-Server beschränken |
+| `FOYER_LIVE_PORT` | `8189` | WebRTC-Bild der Live-Folien (UDP, ersatzweise TCP); muss von den Displays erreichbar sein |
+| `FOYER_LIVE_HOSTS` | – | Zusätzliche Adressen, die den Displays fürs Bild genannt werden (z. B. die LAN-IP, wenn das Gateway hinter NAT läuft) |
+| `FOYER_FFMPEG_NDI` | `/opt/ffmpeg-ndi/bin/ffmpeg`, falls vorhanden | Eigenes ffmpeg mit NDI-Eingang (siehe „NDI als Live-Quelle“) |
+| `FOYER_MEDIAMTX` | `/opt/mediamtx/mediamtx`, falls vorhanden | Streaming-Server (im Docker-Image des Gateways enthalten) |
+| `FOYER_NDI_EXTRA_IPS` | – | NDI-Sender in anderen Subnetzen (dorthin reicht mDNS nicht) |
+| `FOYER_NDI_GROUPS` | – (nur `public`) | NDI-Gruppen, in denen gesucht wird, z. B. `public,lgstv` |
+| `FOYER_LIVE_LOCAL_PORTS` | `18550` | Erster von drei Ports, die MediaMTX nur auf 127.0.0.1 belegt |
+| `FOYER_GATEWAY_DIR` | Temp-Ordner | Erzeugte MediaMTX- und NDI-Konfiguration, bei jedem Start neu |
+
+Lokal ohne Docker: MediaMTX installieren, dann `FOYER_LIVE_GATEWAY_KEY=… npm run start -w @foyer/live-gateway` und Foyer mit `FOYER_LIVE_GATEWAY=http://127.0.0.1:8190` und demselben Schlüssel starten.
+
+
+### Deployment (Docker)
+
+Zwei Images: **Foyer** (Server, Admin, Player; [`Dockerfile`](Dockerfile)) und das **Live-Gateway** ([`apps/live-gateway/Dockerfile`](apps/live-gateway/Dockerfile)). Das Foyer-Image enthält keine NDI-Teile und darf weitergegeben werden. `deploy/compose.yaml` startet beide auf demselben Host hinter einem TLS-Reverse-Proxy. Vorher den gemeinsamen Schlüssel anlegen:
+
+```bash
+echo "FOYER_LIVE_GATEWAY_KEY=$(openssl rand -hex 32)" > deploy/.env
+docker compose -f deploy/compose.yaml up -d --build
+docker compose -f deploy/compose.yaml exec foyer node apps/server/src/cli.ts user:create vorname.nachname@schule.de "Vorname Nachname" admin
+```
+
+- Die Daten (Datenbank, `token.key`, Medien) liegen im Volume `foyer-data` unter `/data`. Das Gateway hat keine Daten.
+- Beide laufen mit `network_mode: host`: Foyer, damit der Reverse-Proxy es weiter über 127.0.0.1 erreicht und die Netzprüfung die echten Adressen sieht; das Gateway wegen WebRTC und NDI (mDNS/Multicast). Das Gateway lauscht hier nur auf 127.0.0.1:8190.
+- Die Umwandlung braucht viel CPU. `cpus: 2` in der Compose-Datei hält genug für Foyer frei; bei mehreren gleichzeitigen Quellen anpassen.
+- **Ohne Live-Folien** den Dienst `live-gateway` und `FOYER_LIVE_GATEWAY` aus der Compose-Datei nehmen.
+- **Gateway im AV-Netz:** Auf dem Rechner dort `deploy/live-gateway.compose.yaml` starten (gleiche `deploy/.env`), auf dem Foyer-Server den Dienst `live-gateway` entfernen und `FOYER_LIVE_GATEWAY=http://<gateway>:8190` setzen. 8190 per Firewall nur für den Foyer-Server öffnen.
+
+**NDI als Live-Quelle (optional).** Das normale ffmpeg kann kein NDI mehr: Die ffmpeg-Entwickler haben den NDI-Baustein 2019 entfernt, und das NDI-SDK ist proprietär. Deshalb baut [`deploy/ffmpeg-ndi/build.sh`](deploy/ffmpeg-ndi/build.sh) im Gateway-Image ein **zweites** ffmpeg nach `/opt/ffmpeg-ndi`: ffmpeg 5.1 mit dem Community-Patch [lplassman/FFMPEG-NDI](https://github.com/lplassman/FFMPEG-NDI) (auf einen Commit festgelegt) und dem NDI-SDK 6. Die Umwandlung anderer Quellen nutzt weiter das normale ffmpeg; bricht der NDI-Build, ist nur NDI betroffen.
+
+```bash
+docker compose -f deploy/compose.yaml build --build-arg FOYER_NDI=1 --build-arg NDI_LICENSE=accept live-gateway
+docker compose -f deploy/compose.yaml exec live-gateway node src/cli.ts ndi:sources
+```
+
+- `NDI_LICENSE=accept` bestätigt die [NDI-SDK-Lizenz](https://docs.ndi.video/docs/sdk/licensing). Ohne das bricht der Build ab.
+- So ein Gateway-Image enthält ein **nonfree-ffmpeg und das NDI-SDK**: auf dem eigenen Server nutzen, **nie in eine öffentliche Registry pushen** oder weitergeben. Andere Schulen bauen ihr Gateway-Image selbst; das Foyer-Image ist davon nicht betroffen.
+- NDI findet Quellen per mDNS/Multicast über den **avahi-daemon des Hosts** (`apt install avahi-daemon`; die Compose-Dateien binden dafür `/run/dbus` ein). Das Gateway muss deshalb im selben Netz wie die NDI-Quellen stehen, notfalls auf einem eigenen Rechner im AV-Netz. Quellen in anderen Subnetzen trägt man in `FOYER_NDI_EXTRA_IPS` ein (testen mit `ndi:sources 10.48.20.5,10.48.20.9`); das geht auch ohne Avahi.
+- **NDI-Gruppen:** Jede Quelle meldet sich in einer oder mehreren Gruppen an, und das Gateway findet ohne Einstellung nur die Quellen in `public`. Fehlen Quellen in der Liste, liegen sie oft in einer anderen Gruppe. Die Gruppen stehen in `FOYER_NDI_GROUPS` am Gateway; `public` muss dabei mit aufgeführt werden, wenn man diese Quellen weiter sehen will (`public,lgstv`). Testen mit `ndi:sources --groups public,lgstv`. Eine einzelne Folie kann im Feld **NDI-Gruppen** eigene Gruppen haben; sie gelten dann für „Quellen suchen“ und das Abspielen dieser Folie statt der Gateway-Einstellung. Das Gateway schreibt dafür `ndi-config.v1.json` in `FOYER_GATEWAY_DIR` und setzt `NDI_CONFIG_DIR`. Gruppen filtern nur die Suche, sie sind kein Zugriffsschutz.
+- Ohne Docker auf Debian/Ubuntu: `sudo NDI_LICENSE=accept deploy/ffmpeg-ndi/build.sh`.
+- Beim Start meldet das Gateway `NDI-Eingang verfügbar`, wenn es das NDI-ffmpeg gefunden hat, und Foyer meldet `Live-Gateway erreichbar … mit NDI-Eingang`.
 
 ### Mediathek
 

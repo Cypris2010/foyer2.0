@@ -30,7 +30,7 @@ function hash(text: string): number {
 // Cheap content signature: a slide is re-mounted only when its content changed.
 // Data is left out: new data goes to update() of the mounted slide (see mount()).
 function signature(slide: ManifestSlide): string {
-  return `${slide.id}:${hash(JSON.stringify([slide.type, slide.config, slide.documentUrl, slide.background, slide.media, slide.playsToEnd, slide.credits]))}`;
+  return `${slide.id}:${hash(JSON.stringify([slide.type, slide.config, slide.documentUrl, slide.liveUrl, slide.background, slide.media, slide.playsToEnd, slide.credits]))}`;
 }
 
 const dataHash = (slide: ManifestSlide) => hash(JSON.stringify(slide.data ?? null));
@@ -326,7 +326,7 @@ export class Ticker {
     };
     try {
       const instance =
-        renderer(el, { config: slide.config, data: slide.data, ctx, documentUrl: slide.documentUrl, media: slide.media ?? {}, playsToEnd: slide.playsToEnd === true }) || {};
+        renderer(el, { config: slide.config, data: slide.data, ctx, documentUrl: slide.documentUrl, liveUrl: slide.liveUrl, media: slide.media ?? {}, playsToEnd: slide.playsToEnd === true }) || {};
       if (slide.credits && slide.credits.length) {
         const credit = document.createElement('div');
         credit.className = 'foyer-credit';

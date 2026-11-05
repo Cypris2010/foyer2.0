@@ -34,6 +34,9 @@ export const config = {
   // Media pipeline (KONZEPT 6.2): ffmpeg/ffprobe on the server, upload limit in MB.
   ffmpeg: process.env.FOYER_FFMPEG ?? 'ffmpeg',
   ffprobe: process.env.FOYER_FFPROBE ?? 'ffprobe',
+  // Live gateway for live slides (apps/live-gateway, own container); empty = no live video.
+  liveGateway: process.env.FOYER_LIVE_GATEWAY ?? '',
+  liveGatewayKey: process.env.FOYER_LIVE_GATEWAY_KEY ?? '',
   mediaMaxMb: Number(process.env.FOYER_MEDIA_MAX_MB ?? 2048),
   sessionIdleHours: 8,
   sessionMaxDays: 7,

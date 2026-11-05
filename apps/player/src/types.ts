@@ -14,6 +14,8 @@ export interface ManifestSlide {
   config: unknown;
   data: unknown;
   documentUrl?: string;
+  /** Live types: signed WHEP endpoint of the gateway. */
+  liveUrl?: string;
   /** personalData types: `data` comes from here (data.ts), not from the manifest. */
   dataUrl?: string;
   dataVersion?: string;

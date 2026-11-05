@@ -1,0 +1,14 @@
+{
+  "name": "@foyer/live-gateway",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/index.ts",
+    "start": "node src/index.ts",
+    "cli": "node src/cli.ts"
+  },
+  "devDependencies": {
+    "@foyer/slide-sdk": "*",
+    "@types/node": "^24.10.0"
+  }
+}

@@ -1,0 +1,48 @@
+# Live test source for the probe (MediaMTX v1.21): a moving test pattern with a counter,
+# encoded the way the Foyer gateway would deliver it (H.264 Constrained Baseline, no
+# B-frames, 1 s GOP) and offered over WebRTC (WHEP, :8889) and HLS (fMP4, :8888).
+# Only the options that differ from the MediaMTX defaults are listed.
+
+logLevel: warn
+
+# Reading is open (the Airtames need no login), publishing only from this machine.
+authInternalUsers:
+  - user: any
+    ips: []
+    permissions:
+      - action: read
+  - user: any
+    ips: ["127.0.0.1", "::1"]
+    permissions:
+      - action: publish
+
+rtmp: false
+moq: false
+srt: false
+
+# Plain fMP4 segments: the probe's small HLS loader reads them without hls.js.
+hlsVariant: fmp4
+hlsAlwaysRemux: true
+hlsSegmentDuration: 1s
+
+# WebRTC media goes over UDP 8189 (TCP 8189 as fallback for strict firewalls).
+webrtcLocalUDPAddress: :8189
+webrtcLocalTCPAddress: :8189
+
+paths:
+  live1080:
+    runOnInit: >
+      ffmpeg -hide_banner -loglevel error -re
+      -f lavfi -i "testsrc=size=1920x1080:rate=30,drawbox=x='mod(t*600,iw)':y=0:w=40:h=ih:color=white@0.8:t=fill,noise=alls=12:allf=t"
+      -c:v libx264 -preset veryfast -tune zerolatency -profile:v baseline -pix_fmt yuv420p
+      -b:v 5M -maxrate 5M -bufsize 5M -g 30 -keyint_min 30 -bf 0
+      -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:$RTSP_PORT/$MTX_PATH
+    runOnInitRestart: true
+  live720:
+    runOnInit: >
+      ffmpeg -hide_banner -loglevel error -re
+      -f lavfi -i "testsrc=size=1280x720:rate=30,drawbox=x='mod(t*400,iw)':y=0:w=30:h=ih:color=white@0.8:t=fill,noise=alls=12:allf=t"
+      -c:v libx264 -preset veryfast -tune zerolatency -profile:v baseline -pix_fmt yuv420p
+      -b:v 3M -maxrate 3M -bufsize 3M -g 30 -keyint_min 30 -bf 0
+      -f rtsp -rtsp_transport tcp rtsp://127.0.0.1:$RTSP_PORT/$MTX_PATH
+    runOnInitRestart: true

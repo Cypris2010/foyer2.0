@@ -44,7 +44,7 @@ export function mediaSourceKey(ctx: AppContext, id: string): string | null {
 
 /** What slide servers get to see. */
 export function slideServerContext(ctx: AppContext, displayId?: string): ServerContext {
-  return { displayId, locale: ctx.locale, timeZone: ctx.timeZone, untisApi: untisApiSettings(ctx) };
+  return { displayId, locale: ctx.locale, timeZone: ctx.timeZone, untisApi: untisApiSettings(ctx), live: ctx.liveServices };
 }
 
 const sourceKeyBody = z.object({ key: z.string().trim().max(500) });

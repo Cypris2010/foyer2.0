@@ -49,6 +49,25 @@ export interface ServerContext {
   locale: string;
   /** WebUntis-Datendienst from the admin settings; null when not set up. Server only: the key never reaches a browser. */
   untisApi: { url: string; key: string } | null;
+  /** Live gateway services (set when the server has them). */
+  live?: LiveServices;
+}
+
+/** A live source the server's gateway converts for the displays (KONZEPT 6.5). */
+export interface LiveInput {
+  /** `ndi`: an NDI source name; `url`: anything ffmpeg reads (rtsp, rtmp, srt, hls, udp …). */
+  kind: 'ndi' | 'url';
+  value: string;
+  /** `ndi`: groups to search for the source instead of the server's default. */
+  groups?: string[];
+  /** Output profile; 720p30 is what Airtame 2 decodes cleanly over WebRTC. */
+  profile: '720p30' | '1080p30';
+  audio: boolean;
+}
+
+export interface LiveServices {
+  /** NDI sources the server sees (in `groups`, else its default groups); throws when the server has no NDI input. */
+  ndiSources(options?: { groups?: string[] }): Promise<Array<{ name: string; address: string }>>;
 }
 
 export interface Option {
@@ -79,6 +98,11 @@ export interface SlideServer<C = unknown, D = unknown> {
   refreshSeconds?: number | ((config: C) => number);
   /** Option lists for admin select widgets, keyed by the widget's `options` name. */
   options?: Record<string, (config: Partial<C>, ctx: ServerContext) => Promise<Option[]>>;
+  /**
+   * The slide shows a live source: the server converts it and the renderer gets
+   * a WebRTC (WHEP) address as `liveUrl`. null = not configured yet.
+   */
+  live?(config: C): LiveInput | null;
 }
 
 export function defineSlideServer<C, D>(server: SlideServer<C, D>): SlideServer<C, D> {
@@ -133,6 +157,8 @@ export interface RenderProps<C, D> {
   playsToEnd: boolean;
   /** Set when the type's server implements `document()`. */
   documentUrl?: string;
+  /** WHEP endpoint of the slide's live source, when the type's server implements `live()`. */
+  liveUrl?: string;
 }
 
 export type SlideRenderer<C = any, D = any> = (root: HTMLElement, props: RenderProps<C, D>) => SlideInstance | void;
