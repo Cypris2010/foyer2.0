@@ -17,7 +17,9 @@ import { getCookie } from 'hono/cookie';
 import { clientIp, ipAllowed } from './net.ts';
 import { audit, transaction } from './db.ts';
 import { decrypt, encrypt, randomToken, safeEqual, sha256 } from './crypto.ts';
-import { buildManifest, buildSlideEntry, dataSignature, documentSignature, liveSignature, slideData, type DisplayRow, type SlideRow } from './manifest.ts';
+import { TEST_PATTERNS, type TestPatternState } from '@foyer/slide-sdk/test-patterns';
+import { affectedDisplays, MAX_WALL_SIDE, setWallCells, trimWall, WallError, wallScreens } from './walls.ts';
+import { buildManifest, buildSlideEntry, dataSignature, documentSignature, DISPLAY_COLUMNS, liveSignature, slideData, type DisplayRow, type SlideRow } from './manifest.ts';
 import { parseConfig } from './registry.ts';
 import { hashPassword } from './crypto.ts';
 import { securityHeaders } from './headers.ts';
@@ -35,7 +37,20 @@ const id = () => crypto.randomUUID();
 // --- Request validation ------------------------------------------------------
 
 const loginBody = z.object({ email: z.string().min(1).max(320), password: z.string().min(1).max(1000) });
-const displayCreate = z.object({ name: z.string().min(1).max(200) });
+const wallSide = z.number().int().min(1).max(MAX_WALL_SIDE);
+const displayCreate = z.object({
+  name: z.string().min(1).max(200),
+  // A wall: a grid that normal displays are assigned to (walls.ts).
+  kind: z.enum(['screen', 'wall']).default('screen'),
+  rows: wallSide.default(1),
+  cols: wallSide.default(2),
+});
+const testPatternBody = z.object({ action: z.enum(['start', 'next', 'prev', 'stop']) });
+// A forgotten test pattern ends by itself and the programme continues.
+const TEST_PATTERN_MS = 10 * 60_000;
+const wallCells = z.object({
+  cells: z.array(z.object({ displayId: z.string(), row: z.number().int().min(0), col: z.number().int().min(0) })).max(MAX_WALL_SIDE ** 2),
+});
 const cidrList = z
   .string()
   .max(2000)
@@ -47,6 +62,10 @@ const displayPatch = z.object({
   soundAllowed: z.boolean().optional(),
   orientation: z.enum(['landscape', 'portrait']).optional(),
   networks: cidrList.optional(),
+  wallRows: wallSide.optional(),
+  wallCols: wallSide.optional(),
+  wallBezel: z.number().int().min(0).max(500).optional(),
+  wallMode: z.enum(['span', 'stack']).optional(),
 });
 const channelBody = z.object({
   name: z.string().min(1).max(200),
@@ -114,23 +133,50 @@ export interface AppOptions {
   remoteAddress?: (c: Context) => string;
 }
 
+/** For the admin: which test pattern runs, by name. */
+function testPatternInfo(state: TestPatternState | null) {
+  if (!state) return null;
+  const pattern = TEST_PATTERNS[state.index];
+  return { index: state.index, count: TEST_PATTERNS.length, name: pattern.name, hint: pattern.hint, until: state.until };
+}
+
 export function createApp(ctx: AppContext, options: AppOptions = {}) {
   const { db, registry, events } = ctx;
   const app = new Hono<Env>();
   const remote = options.remoteAddress ?? (() => '127.0.0.1');
+  // Test patterns by the display (or wall) the admin started them on; live state.
+  const testPatterns = new Map<string, TestPatternState>();
+  const activeTest = (displayId: string): TestPatternState | null => {
+    const state = testPatterns.get(displayId);
+    if (state && state.until > ctx.now()) return state;
+    testPatterns.delete(displayId);
+    return null;
+  };
+
   // Last slide each display reported; in memory only, it is live state.
   const nowPlaying = new Map<string, { slideId: string | null; version: string | null; at: number }>();
   const leases = new LeaseTable();
   // Finished transcodes change what slides show: players fetch the manifest again.
   ctx.media.onReady = () => events.broadcast('manifest-changed');
 
-  const sseStream = (c: Context, key: string) =>
+  /**
+   * initial: events a (re)connecting client must not miss, sent after "hello".
+   * keys as an object (stream label → event key): one stream for several keys,
+   * every event carries its label as "key".
+   */
+  const sseStream = (c: Context, keys: string | Record<string, string>, initial: () => Array<{ event: string; data: unknown }> = () => []) =>
     streamSSE(c, async (stream) => {
-      const unsubscribe = events.subscribe(key, (event, data) => {
-        void stream.writeSSE({ event, data: JSON.stringify(data ?? {}) });
-      });
+      const labelled = typeof keys !== 'string';
+      const unsubscribes = Object.entries(labelled ? keys : { '': keys }).map(([label, key]) =>
+        events.subscribe(key, (event, data) => {
+          const payload = labelled ? { ...(data as object | undefined), key: label } : (data ?? {});
+          void stream.writeSSE({ event, data: JSON.stringify(payload) });
+        }),
+      );
+      const unsubscribe = () => unsubscribes.forEach((off) => off());
       stream.onAbort(unsubscribe);
       await stream.writeSSE({ event: 'hello', data: '{}' });
+      for (const { event, data } of initial()) await stream.writeSSE({ event, data: JSON.stringify(data) });
       while (!stream.aborted) {
         await stream.sleep(25_000);
         if (!stream.aborted) await stream.writeSSE({ event: 'ping', data: '{}' });
@@ -216,19 +262,34 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
 
   // Displays
   admin.get('/displays', (c) => {
-    const rows = db.prepare('SELECT id, name, default_channel_id, show_progress, sound_allowed, orientation, networks, last_seen_at, status_json FROM displays ORDER BY name').all() as any[];
+    const rows = db.prepare(`SELECT ${DISPLAY_COLUMNS}, last_seen_at, status_json FROM displays ORDER BY name`).all() as any[];
     const titleOf = db.prepare('SELECT title FROM slides WHERE id = ?');
+    const stateOf = (r: any) =>
+      displayState({ connected: events.connected(r.id) > 0, lastSeenAt: r.last_seen_at, now: ctx.now(), serverStartedAt: ctx.startedAt });
     return c.json(
       rows.map((r) => {
         const status = r.status_json ? JSON.parse(r.status_json) : null;
-        const state = displayState({
-          connected: events.connected(r.id) > 0,
-          lastSeenAt: r.last_seen_at,
-          now: ctx.now(),
-          serverStartedAt: ctx.startedAt,
-        });
-        const current = state === 'online' && status?.slideId ? (titleOf.get(status.slideId) as { title: string } | undefined) : undefined;
+        // A wall has no device: it is online when all of its screens are.
+        const screens = r.kind === 'wall' ? rows.filter((s) => s.wall_id === r.id) : [];
+        const screenStates = screens.map(stateOf);
+        const state =
+          r.kind !== 'wall'
+            ? stateOf(r)
+            : !screens.length
+              ? 'never'
+              : screenStates.every((s) => s === 'online')
+                ? 'online'
+                : screenStates.includes('checking')
+                  ? 'checking'
+                  : screenStates.every((s) => s === 'never')
+                    ? 'never'
+                    : 'offline';
+        const lead = screens.find((s, i) => screenStates[i] === 'online' && s.status_json);
+        const slideId = r.kind === 'wall' ? (lead ? JSON.parse(lead.status_json).slideId : null) : status?.slideId;
+        const current = state !== 'never' && slideId ? (titleOf.get(slideId) as { title: string } | undefined) : undefined;
         const holder = leases.holder(r.id, ctx.now());
+        // Wall: the newest "offline since" of a screen that is down.
+        const offlineSince = Math.max(0, ...screens.filter((_, i) => screenStates[i] === 'offline').map((s) => s.last_seen_at ?? 0)) || null;
         return {
           id: r.id,
           name: r.name,
@@ -237,11 +298,27 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
           soundAllowed: r.sound_allowed === 1,
           orientation: r.orientation,
           networks: r.networks,
-          lastSeenAt: r.last_seen_at,
+          lastSeenAt: r.kind === 'wall' ? offlineSince : r.last_seen_at,
           status,
           state,
           currentSlideTitle: current?.title ?? null,
           device: holder ? { ip: holder.ip, since: holder.since } : null,
+          kind: r.kind,
+          wall:
+            r.kind === 'wall'
+              ? {
+                  rows: r.wall_rows,
+                  cols: r.wall_cols,
+                  bezel: r.wall_bezel,
+                  mode: r.wall_mode,
+                  screens: screens.length,
+                  online: screenStates.filter((s) => s === 'online').length,
+                }
+              : null,
+          wallId: r.wall_id,
+          wallRow: r.wall_row,
+          wallCol: r.wall_col,
+          testPattern: testPatternInfo(activeTest(r.id)),
         };
       }),
     );
@@ -251,12 +328,17 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
   // the slide the real player reported last (null while the display is offline).
   admin.get('/preview/displays/:id/manifest', async (c) => {
     const display = db
-      .prepare('SELECT id, name, default_channel_id, show_progress, sound_allowed, orientation, networks, last_seen_at FROM displays WHERE id = ?')
+      .prepare(`SELECT ${DISPLAY_COLUMNS}, last_seen_at FROM displays WHERE id = ?`)
       .get(c.req.param('id')) as (DisplayRow & { last_seen_at: number | null }) | undefined;
     if (!display) return c.json({ error: 'Nicht gefunden' }, 404);
     const manifest = await buildManifest(ctx, display, { preview: true });
+    const isOnline = (row: { id: string; last_seen_at: number | null }) =>
+      displayState({ connected: events.connected(row.id) > 0, lastSeenAt: row.last_seen_at, now: ctx.now(), serverStartedAt: ctx.startedAt }) === 'online';
+    // A wall is followed while any of its screens runs (they report for it).
     const online =
-      displayState({ connected: events.connected(display.id) > 0, lastSeenAt: display.last_seen_at, now: ctx.now(), serverStartedAt: ctx.startedAt }) === 'online';
+      display.kind === 'wall'
+        ? (db.prepare('SELECT id, last_seen_at FROM displays WHERE wall_id = ?').all(display.id) as Array<{ id: string; last_seen_at: number | null }>).some(isOnline)
+        : isOnline(display);
     const current = online ? nowPlaying.get(display.id) : undefined;
     return c.json({
       ...manifest,
@@ -267,6 +349,12 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
   });
 
   admin.get('/preview/displays/:id/events', (c) => sseStream(c, `watch:${c.req.param('id')}`));
+  // All live thumbnails of an admin page on one stream: without HTTP/2 a browser
+  // opens only 6 connections per host, and every open stream holds one.
+  admin.get('/preview/events', (c) => {
+    const ids = (c.req.query('displays') ?? '').split(',').filter((displayId) => /^[\w-]{1,64}$/.test(displayId)).slice(0, 200);
+    return sseStream(c, Object.fromEntries(ids.map((displayId) => [displayId, `watch:${displayId}`])));
+  });
 
   admin.post('/displays', adminOnly, async (c) => {
     const body = displayCreate.safeParse(await c.req.json().catch(() => null));
@@ -274,10 +362,13 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
     const displayId = id();
     const token = randomToken();
     const now = ctx.now();
-    db.prepare('INSERT INTO displays (id, name, token_hash, token_enc, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)').run(
-      displayId, body.data.name, sha256(token), encrypt(ctx.tokenKey, token), now, now,
-    );
-    audit(db, c.get('user').id, 'create', 'display', displayId, { name: body.data.name });
+    const { name, kind, rows, cols } = body.data;
+    // Walls get a token too (the column is required), but it is never handed out.
+    db.prepare(
+      'INSERT INTO displays (id, name, token_hash, token_enc, kind, wall_rows, wall_cols, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    ).run(displayId, name, sha256(token), kind === 'wall' ? null : encrypt(ctx.tokenKey, token), kind, kind === 'wall' ? rows : null, kind === 'wall' ? cols : null, now, now);
+    audit(db, c.get('user').id, 'create', 'display', displayId, kind === 'wall' ? { name, kind, rows, cols } : { name });
+    if (kind === 'wall') return c.json({ id: displayId }, 201);
     return c.json({ id: displayId, token, playerPath: `/p/${token}` }, 201);
   });
 
@@ -314,12 +405,43 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
     if (body.data.soundAllowed !== undefined) set('sound_allowed', body.data.soundAllowed ? 1 : 0);
     if (body.data.orientation !== undefined) set('orientation', body.data.orientation);
     if (body.data.networks !== undefined) set('networks', body.data.networks);
+    const displayId = c.req.param('id');
+    const current = db.prepare('SELECT kind, wall_rows, wall_cols FROM displays WHERE id = ?').get(displayId) as
+      | { kind: string; wall_rows: number | null; wall_cols: number | null }
+      | undefined;
+    if (!current) return c.json({ error: 'Nicht gefunden' }, 404);
+    const { wallRows, wallCols, wallBezel, wallMode } = body.data;
+    if ((wallRows ?? wallCols ?? wallBezel ?? wallMode) !== undefined && current.kind !== 'wall') return c.json({ error: 'Kein Wand-Display' }, 400);
+    if (wallRows !== undefined) set('wall_rows', wallRows);
+    if (wallCols !== undefined) set('wall_cols', wallCols);
+    if (wallBezel !== undefined) set('wall_bezel', wallBezel);
+    if (wallMode !== undefined) set('wall_mode', wallMode);
     if (!fields.length) return c.json({ ok: true });
     set('updated_at', ctx.now());
-    const result = db.prepare(`UPDATE displays SET ${fields.join(', ')} WHERE id = ?`).run(...values, c.req.param('id'));
-    if (!result.changes) return c.json({ error: 'Nicht gefunden' }, 404);
-    audit(db, c.get('user').id, 'update', 'display', c.req.param('id'), body.data);
-    events.send(c.req.param('id'), 'manifest-changed');
+    // Screens outside a smaller grid leave the wall (and play their own channel again).
+    const left = transaction(db, () => {
+      db.prepare(`UPDATE displays SET ${fields.join(', ')} WHERE id = ?`).run(...values, displayId);
+      if (wallRows === undefined && wallCols === undefined) return [];
+      return trimWall(db, displayId, wallRows ?? current.wall_rows ?? 1, wallCols ?? current.wall_cols ?? 1, ctx.now());
+    });
+    audit(db, c.get('user').id, 'update', 'display', displayId, body.data);
+    for (const target of [...affectedDisplays(db, displayId), ...left]) events.send(target, 'manifest-changed');
+    return c.json({ ok: true });
+  });
+
+  // Which display fills which cell of a wall; the whole grid at once.
+  admin.put('/displays/:id/cells', editor, async (c) => {
+    const body = wallCells.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return badRequest(c, body.error);
+    let changed: string[];
+    try {
+      changed = setWallCells(db, c.req.param('id'), body.data.cells, ctx.now());
+    } catch (err) {
+      if (err instanceof WallError) return c.json({ error: err.message }, err.status);
+      throw err;
+    }
+    audit(db, c.get('user').id, 'update-wall', 'display', c.req.param('id'), body.data);
+    for (const target of changed) events.send(target, 'manifest-changed');
     return c.json({ ok: true });
   });
 
@@ -343,21 +465,53 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
     return c.json({ ok: true });
   });
 
+  // A wall passes these on to its screens.
   admin.post('/displays/:id/reload', editor, (c) => {
-    events.send(c.req.param('id'), 'reload');
-    return c.json({ ok: true, connected: events.connected(c.req.param('id')) });
+    const targets = affectedDisplays(db, c.req.param('id'));
+    for (const target of targets) events.send(target, 'reload');
+    return c.json({ ok: true, connected: targets.reduce((sum, target) => sum + events.connected(target), 0) });
+  });
+
+  // Test patterns, stepped through by hand; a wall passes them to its screens.
+  admin.post('/displays/:id/test-pattern', editor, async (c) => {
+    const body = testPatternBody.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return badRequest(c, body.error);
+    const displayId = c.req.param('id');
+    if (!db.prepare('SELECT 1 FROM displays WHERE id = ?').get(displayId)) return c.json({ error: 'Nicht gefunden' }, 404);
+    const current = activeTest(displayId);
+    const count = TEST_PATTERNS.length;
+    const { action } = body.data;
+    const state: TestPatternState | null =
+      action === 'stop'
+        ? null
+        : {
+            index: action === 'start' || !current ? 0 : (current.index + (action === 'next' ? 1 : count - 1)) % count,
+            until: ctx.now() + TEST_PATTERN_MS,
+          };
+    if (state) testPatterns.set(displayId, state);
+    else testPatterns.delete(displayId);
+    for (const target of affectedDisplays(db, displayId)) events.send(target, 'test-pattern', state);
+    return c.json({ testPattern: testPatternInfo(state) });
   });
 
   admin.post('/displays/:id/identify', editor, (c) => {
-    events.send(c.req.param('id'), 'identify');
-    return c.json({ ok: true, connected: events.connected(c.req.param('id')) });
+    const targets = affectedDisplays(db, c.req.param('id'));
+    for (const target of targets) events.send(target, 'identify');
+    return c.json({ ok: true, connected: targets.reduce((sum, target) => sum + events.connected(target), 0) });
   });
 
   admin.delete('/displays/:id', adminOnly, (c) => {
-    const result = db.prepare('DELETE FROM displays WHERE id = ?').run(c.req.param('id'));
+    const displayId = c.req.param('id');
+    // A deleted wall hands its screens back; they play their own channel again.
+    const screens = wallScreens(db, displayId).map((screen) => screen.id);
+    const result = transaction(db, () => {
+      db.prepare('UPDATE displays SET wall_id = NULL, wall_row = NULL, wall_col = NULL, updated_at = ? WHERE wall_id = ?').run(ctx.now(), displayId);
+      return db.prepare('DELETE FROM displays WHERE id = ?').run(displayId);
+    });
     if (!result.changes) return c.json({ error: 'Nicht gefunden' }, 404);
-    audit(db, c.get('user').id, 'delete', 'display', c.req.param('id'));
-    events.send(c.req.param('id'), 'reload');
+    audit(db, c.get('user').id, 'delete', 'display', displayId);
+    events.send(displayId, 'reload');
+    for (const screen of screens) events.send(screen, 'manifest-changed');
     return c.json({ ok: true });
   });
 
@@ -583,7 +737,7 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
     const ip = c.get('clientIp');
     if (!ipAllowed(ip, ctx.playerNetworks)) return c.json({ error: 'Nicht erlaubt' }, 403);
     const display = db
-      .prepare('SELECT id, name, default_channel_id, show_progress, sound_allowed, orientation, networks FROM displays WHERE token_hash = ?')
+      .prepare(`SELECT ${DISPLAY_COLUMNS} FROM displays WHERE token_hash = ?`)
       .get(sha256(c.req.param('token'))) as DisplayRow | undefined;
     // Same response for unknown token and foreign network: nothing to enumerate.
     if (!display) return c.json({ error: 'Nicht erlaubt' }, 403);
@@ -603,6 +757,9 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
   });
 
   player.get('/:token/manifest', async (c) => c.json(await buildManifest(ctx, c.get('display'))));
+
+  // Clock for synchronous displays (player clock.ts): tiny, no database write.
+  player.get('/:token/time', (c) => c.json({ now: ctx.now() }));
 
   player.post('/:token/heartbeat', async (c) => {
     const body = heartbeatBody.safeParse(await c.req.json().catch(() => null));
@@ -627,13 +784,22 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
     nowPlaying.set(display.id, entry);
     db.prepare('UPDATE displays SET last_seen_at = ? WHERE id = ?').run(now, display.id);
     events.send(`watch:${display.id}`, 'now-playing', { ...entry, elapsedMs });
+    // The wall's preview follows its screens (they all show the same slide).
+    if (display.wall_id) {
+      nowPlaying.set(display.wall_id, entry);
+      events.send(`watch:${display.wall_id}`, 'now-playing', { ...entry, elapsedMs });
+    }
     return c.json({ ok: true });
   });
 
   player.get('/:token/events', (c) => {
     const display = c.get('display');
     db.prepare('UPDATE displays SET last_seen_at = ? WHERE id = ?').run(ctx.now(), display.id);
-    return sseStream(c, display.id);
+    // Reconnected during a test: show it again (its own, else its wall's).
+    return sseStream(c, display.id, () => {
+      const test = activeTest(display.id) ?? (display.wall_id ? activeTest(display.wall_id) : null);
+      return test ? [{ event: 'test-pattern', data: test }] : [];
+    });
   });
 
   app.route('/api/player', player);

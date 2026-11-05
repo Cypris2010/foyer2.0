@@ -1,7 +1,7 @@
 // Server-sent events to connected players (key: display id) and to admin
 // live previews (key: "watch:<display id>"): manifest changes, reload,
-// identify, and which slide a display is showing right now.
-export type PlayerEvent = 'manifest-changed' | 'reload' | 'identify' | 'now-playing' | 'released';
+// identify, test patterns, and which slide a display is showing right now.
+export type PlayerEvent = 'manifest-changed' | 'reload' | 'identify' | 'now-playing' | 'released' | 'test-pattern';
 
 type Listener = (event: PlayerEvent, data?: unknown) => void;
 

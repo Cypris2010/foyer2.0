@@ -87,6 +87,14 @@ describe('Player-Zugang', () => {
     expect(JSON.parse(row.status_json).slideId).toBe('s-text');
   });
 
+  it('liefert die Serverzeit für die gemeinsame Uhr', async () => {
+    const { app, token, now } = await setup();
+    const res = await app.request(`/api/player/${token}/time`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ now });
+    expect((await app.request('/api/player/falsch/time')).status).toBe(403);
+  });
+
   it('schreibt keine Tokens ins Log', () => {
     expect(maskPath('/p/abc123')).toBe('/p/***');
     expect(maskPath('/api/player/abc123/manifest')).toBe('/api/player/***/manifest');
@@ -347,5 +355,18 @@ describe('Live-Vorschau', () => {
     const { app } = await setup();
     expect((await app.request('/api/preview/displays/d1/manifest')).status).toBe(401);
     expect((await app.request('/api/preview/displays/d1/events')).status).toBe(401);
+    expect((await app.request('/api/preview/events?displays=d1')).status).toBe(401);
+  });
+
+  it('schickt die Ereignisse mehrerer Displays über einen Stream', async () => {
+    const { app, token, loginAs } = await setup();
+    const res = await app.request('/api/preview/events?displays=d1,d2', { headers: { cookie: await loginAs('viewer') } });
+    const reader = res.body!.getReader();
+    let text = '';
+    while (!text.includes('event: hello')) text += new TextDecoder().decode((await reader.read()).value);
+    await app.request(`/api/player/${token}/now-playing`, json('POST', { slideId: 's-html', version: 'v1' }));
+    while (!text.includes('now-playing')) text += new TextDecoder().decode((await reader.read()).value);
+    await reader.cancel();
+    expect(text).toMatch(/event: now-playing\ndata: \{[^\n]*"slideId":"s-html"[^\n]*"key":"d1"\}/);
   });
 });

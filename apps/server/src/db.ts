@@ -164,6 +164,25 @@ const migrations: Array<string | ((db: DatabaseSync) => void)> = [
   ALTER TABLE media ADD COLUMN show_credit INTEGER NOT NULL DEFAULT 0;
   CREATE INDEX media_source ON media (json_extract(source_json, '$.provider'), json_extract(source_json, '$.id')) WHERE source_json IS NOT NULL;
   `,
+  // Display walls: a display of kind "wall" has channel and calendar like any
+  // other, but no device of its own; normal displays fill the cells of its grid
+  // (wall_id/row/col) and each shows its part of the wall. bezel: px between
+  // the picture areas of neighbouring screens (hidden behind the frames).
+  `
+  ALTER TABLE displays ADD COLUMN kind TEXT NOT NULL DEFAULT 'screen' CHECK (kind IN ('screen', 'wall'));
+  ALTER TABLE displays ADD COLUMN wall_rows INTEGER;
+  ALTER TABLE displays ADD COLUMN wall_cols INTEGER;
+  ALTER TABLE displays ADD COLUMN wall_bezel INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE displays ADD COLUMN wall_id TEXT REFERENCES displays(id) ON DELETE SET NULL;
+  ALTER TABLE displays ADD COLUMN wall_row INTEGER;
+  ALTER TABLE displays ADD COLUMN wall_col INTEGER;
+  CREATE UNIQUE INDEX displays_wall_cell ON displays (wall_id, wall_row, wall_col) WHERE wall_id IS NOT NULL;
+  `,
+  // Wall modes: "span" shows one big picture across all screens; "stack" shows
+  // one slide per screen, and on every change each slide moves on to the next screen.
+  `
+  ALTER TABLE displays ADD COLUMN wall_mode TEXT NOT NULL DEFAULT 'span' CHECK (wall_mode IN ('span', 'stack'));
+  `,
 ];
 
 export type Db = DatabaseSync;

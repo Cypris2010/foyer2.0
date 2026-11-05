@@ -21,6 +21,16 @@ export interface Display {
   currentSlideTitle: string | null;
   /** The one device currently holding this display. */
   device: { ip: string; since: number } | null;
+  /** "wall": a grid of displays showing one picture; it has no device itself. */
+  kind: 'screen' | 'wall';
+  /** mode: "span" one big picture, "stack" one slide per screen that moves on screen by screen. */
+  wall: { rows: number; cols: number; bezel: number; mode: 'span' | 'stack'; screens: number; online: number } | null;
+  /** Set while this display is part of a wall. */
+  wallId: string | null;
+  wallRow: number | null;
+  wallCol: number | null;
+  /** Test pattern on screen right now (started on this display or wall). */
+  testPattern: { index: number; count: number; name: string; hint: string; until: number } | null;
 }
 
 export interface Channel {

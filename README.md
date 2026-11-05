@@ -145,6 +145,14 @@ Unter **Medien → Aus Bilddatenbank** (auch im Auswahldialog einer Folie) sucht
 - **Größen:** Von Commons kommt bei Bildern eine 1920-px-Fassung statt des Originals, bei Videos die 1080p-WebM-Fassung. Pixabay-Videos höchstens 1080p, Unsplash-Fotos 1920 px. Pixabay sucht mit `safesearch`, Unsplash mit `content_filter=high`, Openverse ohne als „mature“ markierte Bilder; Unsplash+-Fotos sind ausgeblendet. Übernehmen dürfen Redakteure und Admins, wie beim Upload.
 - Pexels ist nicht dabei, weil es keine neuen API-Schlüssel mehr vergibt. Weitere Quellen kommen als `Provider` in [`apps/server/src/media-sources.ts`](apps/server/src/media-sources.ts) dazu.
 
+### Synchrone Displays und Display-Wände
+
+Alle Displays laufen auf der Uhr des Servers (`/api/player/…/time`, abgeglichen beim Start und alle 30 s). Welche Folie läuft, ergibt sich allein aus der Uhrzeit: Displays mit demselben Programm schalten gleichzeitig um, ein neu gestartetes Display steigt mitten in der laufenden Folie ein, Videos werden über die Abspielgeschwindigkeit an der Uhr gehalten.
+
+Eine **Wand** (Admin → Displays → „Wand anlegen“) ist ein Raster aus bis zu 4 × 4 Feldern, in das man vorhandene Displays legt. Channel und Kalender bekommt die Wand; die Displays darin zeigen jeweils ihren Ausschnitt eines großen Bildes und behalten ihre URL. Der Player lädt sich dafür als iframe in Wandgröße (die Folien passen ihr Layout an das Wandformat an, z. B. 32:9 oder 8:9) und zeigt nur sein Feld. Der Rahmenausgleich vergrößert das Bild um die Rahmen zwischen den Bildschirmen, damit Linien gerade durchlaufen. Ton spielt nur das Display oben links. Nimmt man ein Display aus der Wand, zeigt es wieder seinen eigenen Channel.
+
+**Testbilder** startet man im Admin mit „Testbild“ an einem Display oder einer Wand und schaltet sie von Hand durch: Gitter (Ausrichtung, Rahmenausgleich), Rand und Pixel (abgeschnittener Rand, Skalierung), Vollflächen in Weiß, Schwarz, Rot, Grün, Blau (Pixelfehler, gleiche Farbe aller Bildschirme), Farbbalken und Graustufen, Bewegung mit Serverzeit-Zähler (Synchronität per Handyfoto) und Info (Auflösung, Player-Version, Uhrabweichung). Nach 10 Minuten endet der Testmodus von selbst.
+
 ### WebUntis: Raumanzeige und Lehrkräfte-Dashboard
 
 Die beiden Folien sind 1:1 aus wp-foyer übernommen (gleiche Darstellung, Beschriftungen und Optionen). Neu ist, wo die Daten herkommen:

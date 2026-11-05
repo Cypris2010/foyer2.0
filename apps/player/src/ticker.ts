@@ -4,11 +4,11 @@ import type { PlayerContext, SlideInstance } from '@foyer/slide-sdk';
 import { renderers } from './registry.ts';
 import type { Manifest, ManifestSlide } from './types.ts';
 import { mountBackground, type BackgroundControl } from './background.ts';
+import { keepVideosOnClock, seekVideos, slotAt, type Slot } from './timeline.ts';
+import type { Stack } from './wall.ts';
 
 const TRANSITION_MS = 1500;
-// Slides that end with their media get this much extra before the timer takes over.
-const END_GRACE_S = 3;
-// Live preview: seek media only when the display is clearly ahead.
+// Joining a slide that already runs: seek media only when clearly behind.
 const CATCH_UP_MIN_S = 1;
 
 interface Mounted {
@@ -48,17 +48,25 @@ export class Ticker {
   private current: Mounted | null = null;
   private mounted = new Map<string, Mounted>();
   private timer: ReturnType<typeof setTimeout> | undefined;
-  private shownAt = 0;
+  /** Clock time the current slide began, and the slot it fills on the timeline. */
+  private startedAt = 0;
+  private slot: Slot | null = null;
+  private stopVideoSync = () => {};
   /** Live preview: slides change only when follow() is called, never by timer. */
   private following = false;
+  /** Screen of a stack wall: shows the slide `position` places behind the timeline. */
+  private stack: Stack | null = null;
   private readonly stage: HTMLElement;
   private readonly progress: HTMLElement;
   private readonly hooks: TickerHooks;
+  /** Epoch ms that decide the timeline (displays: the server's clock, clock.ts). */
+  private readonly clock: () => number;
 
-  constructor(stage: HTMLElement, progress: HTMLElement, hooks: TickerHooks) {
+  constructor(stage: HTMLElement, progress: HTMLElement, hooks: TickerHooks, clock: () => number = Date.now) {
     this.stage = stage;
     this.progress = progress;
     this.hooks = hooks;
+    this.clock = clock;
   }
 
   get version(): string | null {
@@ -71,11 +79,24 @@ export class Ticker {
 
   /** How long the current slide has been on screen. */
   get elapsedMs(): number {
-    return this.current ? Math.round(performance.now() - this.shownAt) : 0;
+    return this.current ? Math.max(0, Math.round(this.clock() - this.startedAt)) : 0;
   }
 
   get displayName(): string {
     return this.manifest?.display.name ?? '';
+  }
+
+  /**
+   * Stack wall: every screen keeps the timeline (all of them change together)
+   * but shows an older slide, so each slide moves on one screen per change.
+   */
+  setStack(stack: Stack | null) {
+    if (stack?.position === this.stack?.position && stack?.direction === this.stack?.direction) return;
+    this.stack = stack;
+    if (this.manifest) this.applyTransition(this.manifest);
+    // Another place in the stack: show the right slide now, not at the next change.
+    this.slot = null;
+    if (this.manifest) this.schedule();
   }
 
   /** New manifests take effect at the next slide boundary, never mid-slide. */
@@ -83,7 +104,7 @@ export class Ticker {
     if (this.manifest && manifest.version === this.manifest.version && !this.pending) return;
     if (!this.manifest || !this.current) {
       this.apply(manifest);
-      this.advance();
+      this.schedule();
     } else {
       this.pending = manifest;
       // New data (refreshSeconds) shows right away, not only at the next slide.
@@ -109,7 +130,7 @@ export class Ticker {
     if (index < 0) return false;
     if (this.current?.slide.id !== slideId) {
       this.index = index;
-      if (!this.show(this.slides[index])) return false;
+      if (!this.show(this.slides[index], this.clock() - elapsedMs)) return false;
     } else if (!joining) {
       return true;
     }
@@ -129,7 +150,22 @@ export class Ticker {
   autonomous() {
     if (!this.following) return;
     this.following = false;
-    this.advance();
+    this.resync();
+  }
+
+  /** The clock moved (first contact with the server): show what it says now. */
+  resync() {
+    if (this.following || !this.manifest) return;
+    const slot = slotAt(this.durations(), this.clock());
+    if (slot && !this.pending && this.current && this.current.slide.id === this.slides[this.slideIndex(slot)]?.id) {
+      // Same slide on screen: only its end moves, nothing restarts.
+      clearTimeout(this.timer);
+      this.slot = slot;
+      this.timer = setTimeout(this.schedule, Math.max(0, slot.end - this.clock()));
+      return;
+    }
+    this.slot = null;
+    this.schedule();
   }
 
   private apply(manifest: Manifest) {
@@ -140,30 +176,64 @@ export class Ticker {
       if (!renderers.has(slide.type)) this.hooks.onError(`Unbekannter Folientyp: ${slide.type}`);
       return !slide.error && renderers.has(slide.type);
     });
-    this.stage.setAttribute('data-transition', manifest.channel?.transition ?? 'fade');
+    this.applyTransition(manifest);
     this.progress.hidden = !manifest.display.showProgress;
   }
 
-  private advance = () => {
-    clearTimeout(this.timer);
-    const previousId = this.current?.slide.id;
-    if (this.pending) {
-      this.apply(this.pending);
-      // Continue after the slide that was showing, if it still exists.
-      const at = this.slides.findIndex((slide) => slide.id === previousId);
-      this.index = at;
-    }
-    if (!this.slides.length) return this.idle();
+  // A stack moves its slides on to the next screen, whatever the channel says.
+  private applyTransition(manifest: Manifest) {
+    this.stage.setAttribute('data-transition', this.stack ? `stack-${this.stack.direction}` : (manifest.channel?.transition ?? 'fade'));
+  }
 
-    // Skip slides whose renderer fails, but never loop forever.
-    for (let attempt = 0; attempt < this.slides.length; attempt++) {
-      this.index = (this.index + 1) % this.slides.length;
-      if (this.show(this.slides[this.index])) return;
+  /** The slide a slot shows here: in a stack, the one `position` places earlier. */
+  private slideIndex(slot: Slot): number {
+    const count = this.slides.length;
+    return this.stack ? (((slot.index - this.stack.position) % count) + count) % count : slot.index;
+  }
+
+  private durations() {
+    return this.slides.map((slide) => slide.duration);
+  }
+
+  /** Shows the slide the timeline has for now and waits for the end of its slot. */
+  private schedule = () => {
+    clearTimeout(this.timer);
+    if (this.following) return;
+    const now = this.clock();
+    // Woken early (timer jitter) or a slide that came early via done(): its slot holds.
+    if (this.current && this.slot && now < this.slot.end - 1) {
+      this.timer = setTimeout(this.schedule, this.slot.end - now);
+      return;
     }
-    this.idle();
+    if (this.pending) this.apply(this.pending);
+    const slot = slotAt(this.durations(), now);
+    if (!slot) return this.idle();
+    this.play(slot);
   };
 
-  private show(slide: ManifestSlide): boolean {
+  private play(slot: Slot) {
+    this.index = this.slideIndex(slot);
+    this.slot = slot;
+    // A slide that fails to render leaves the previous one on screen for this slot.
+    this.show(this.slides[this.index], Math.min(slot.start, this.clock()), slot.end);
+    this.timer = setTimeout(this.schedule, Math.max(0, slot.end - this.clock()));
+  }
+
+  /**
+   * done(): the next slide comes early and runs to the end of its own slot, so
+   * the timeline (and every display on it) stays where it was.
+   */
+  private finishEarly() {
+    if (!this.slot) return;
+    clearTimeout(this.timer);
+    if (this.pending) this.apply(this.pending);
+    const next = slotAt(this.durations(), this.slot.end);
+    if (!next) return this.idle();
+    this.play(next);
+  }
+
+  /** start/end: clock time the slide began and its slot ends (end: not when following). */
+  private show(slide: ManifestSlide, start: number, end?: number): boolean {
     const entering = this.mount(slide);
     if (!entering) return false;
     const leaving = this.current && this.current !== entering ? this.current : null;
@@ -173,7 +243,9 @@ export class Ticker {
     entering.background.start();
     entering.instance.start?.();
     this.current = entering;
-    this.shownAt = performance.now();
+    this.startedAt = start;
+    this.stopVideoSync();
+    this.stopVideoSync = () => {};
     this.hooks.onSlideChange(slide);
 
     if (leaving) {
@@ -202,10 +274,12 @@ export class Ticker {
       }
     }
 
-    if (!this.following) {
-      this.startProgress(slide.duration);
-      // Media slides end themselves via done(); the timer only catches a stalled video.
-      this.timer = setTimeout(this.advance, (slide.duration + (slide.playsToEnd ? END_GRACE_S : 0)) * 1000);
+    if (!this.following && end !== undefined) {
+      const elapsed = Math.max(0, this.clock() - start);
+      this.startProgress((end - start) / 1000, elapsed / (end - start));
+      // Joined mid-slide (start-up, wall neighbours): videos jump to the same point.
+      if (elapsed >= CATCH_UP_MIN_S * 1000) seekVideos(entering.el, elapsed / 1000);
+      this.stopVideoSync = keepVideosOnClock(entering.el, () => (this.clock() - start) / 1000);
     }
     return true;
   }
@@ -243,9 +317,10 @@ export class Ticker {
       timeZone: this.manifest.settings.timeZone,
       displayName: this.manifest.display.name,
       soundAllowed: this.manifest.display.soundAllowed === true,
-      // While following, only the real display decides when a slide ends.
+      // While following, only the real display decides when a slide ends; in a
+      // stack only the timeline, or one screen would move on without the others.
       done: () => {
-        if (this.current?.key === key && !this.following) this.advance();
+        if (this.current?.key === key && !this.following && !this.stack) this.finishEarly();
       },
       reportError: (error) => this.hooks.onError(`${slide.title}: ${String((error as Error)?.message ?? error)}`),
     };
@@ -295,6 +370,9 @@ export class Ticker {
 
   private idle() {
     clearTimeout(this.timer);
+    this.stopVideoSync();
+    this.stopVideoSync = () => {};
+    this.slot = null;
     this.current?.el.classList.remove('is-active');
     this.current?.instance.stop?.();
     this.current?.background.stop();
@@ -305,29 +383,13 @@ export class Ticker {
     this.hooks.onSlideChange(null);
   }
 
-  private startProgress(seconds: number) {
+  /** from: share of the slot already gone (joined mid-slide). */
+  private startProgress(seconds: number, from = 0) {
     const bar = this.progress;
     bar.style.transition = 'none';
-    bar.style.transform = 'scaleX(0)';
+    bar.style.transform = `scaleX(${Math.min(1, from)})`;
     void bar.offsetWidth; // restart the transition
-    bar.style.transition = `transform ${seconds}s linear`;
+    bar.style.transition = `transform ${seconds * (1 - Math.min(1, from))}s linear`;
     bar.style.transform = 'scaleX(1)';
-  }
-}
-
-/** Moves every video of a slide (content and background) to the given time. */
-function seekVideos(el: HTMLElement, seconds: number) {
-  for (const video of Array.from(el.querySelectorAll('video'))) {
-    const seek = () => {
-      const length = video.duration;
-      const target = !Number.isFinite(length) ? seconds : video.loop ? seconds % length : Math.min(seconds, length - 0.1);
-      try {
-        video.currentTime = target;
-      } catch {
-        // not seekable; keeps playing from where it is
-      }
-    };
-    if (video.readyState >= 1) seek();
-    else video.addEventListener('loadedmetadata', seek, { once: true });
   }
 }

@@ -37,6 +37,21 @@ export interface Manifest {
   settings: { locale: string; timeZone: string };
   /** Player bundle the server serves; when it differs from ours, reload (update.ts). */
   playerBuild?: string | null;
+  /** Part of a wall: where this screen sits (wall.ts). */
+  wall?: {
+    id: string;
+    name: string;
+    rows: number;
+    cols: number;
+    row: number;
+    col: number;
+    bezel: number;
+    screen: string;
+    /** span: one big picture (wall shell); stack: one slide per screen (ticker offset). */
+    mode?: 'span' | 'stack';
+    position?: number;
+    screens?: number;
+  } | null;
   /** Display previews only: the slide the real player reported last; null = offline. */
   nowPlaying?: { slideId: string | null; version: string | null; at: number; elapsedMs?: number } | null;
 }
