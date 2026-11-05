@@ -3,6 +3,7 @@
 // WebUntis-Datendienst: address and key are stored once in the settings table
 // and used by every Untis slide. The key is encrypted with the token key (it
 // lives outside the database, keys.ts) and never sent back to a browser.
+// Image databases (media-sources.ts): the keys of those that need one, the same way.
 import type { Hono, MiddlewareHandler } from 'hono';
 import { z } from 'zod';
 import type { ServerContext } from '@foyer/slide-sdk';
@@ -11,6 +12,7 @@ import type { AuthEnv } from './auth.ts';
 import { audit, getSetting, setSetting } from './db.ts';
 import { decrypt, encrypt } from './crypto.ts';
 import { ApiSource, localNow } from '../../../slide-types/_untis/api.ts';
+import { clearSourceCache, provider, PROVIDERS } from './media-sources.ts';
 
 const URL_KEY = 'untis_api_url';
 const SECRET_KEY = 'untis_api_key';
@@ -27,10 +29,25 @@ export function untisApiSettings(ctx: AppContext): { url: string; key: string } 
   }
 }
 
+const sourceSetting = (id: string) => `media_source_${id}_key`;
+
+/** Decrypted key of an image database; null when none is stored or it is unreadable. */
+export function mediaSourceKey(ctx: AppContext, id: string): string | null {
+  const sealed = getSetting(ctx.db, sourceSetting(id));
+  if (!sealed) return null;
+  try {
+    return decrypt(ctx.tokenKey, sealed);
+  } catch {
+    return null;
+  }
+}
+
 /** What slide servers get to see. */
 export function slideServerContext(ctx: AppContext, displayId?: string): ServerContext {
   return { displayId, locale: ctx.locale, timeZone: ctx.timeZone, untisApi: untisApiSettings(ctx) };
 }
+
+const sourceKeyBody = z.object({ key: z.string().trim().max(500) });
 
 const untisBody = z.object({
   url: z.union([z.url({ protocol: /^https?$/ }), z.literal('')]),
@@ -68,6 +85,54 @@ export function registerIntegrationRoutes(admin: Hono<AuthEnv>, ctx: AppContext,
     // Slides pick the new connection up with their next refresh.
     ctx.events.broadcast('manifest-changed');
     return c.json(untisState());
+  });
+
+  const sourceState = () =>
+    PROVIDERS.map((p) => {
+      const sealed = getSetting(db, sourceSetting(p.id));
+      const key = mediaSourceKey(ctx, p.id);
+      return {
+        id: p.id,
+        name: p.name,
+        kinds: p.kinds,
+        terms: p.terms,
+        homepage: p.homepage,
+        needsKey: !!p.key,
+        signup: p.key?.signup ?? null,
+        placeholder: p.key?.placeholder ?? null,
+        keySet: !!key,
+        keyHint: key ? hint(key) : null,
+        keyUnreadable: !!sealed && !key,
+      };
+    });
+
+  admin.get('/settings/media-sources', adminOnly, (c) => c.json(sourceState()));
+
+  // Empty key: remove it.
+  admin.put('/settings/media-sources/:id', adminOnly, async (c) => {
+    const p = provider(c.req.param('id'));
+    if (!p?.key) return c.json({ error: 'Diese Bilddatenbank braucht keinen Schlüssel' }, 404);
+    const body = sourceKeyBody.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return c.json({ error: 'Ungültige Eingabe', issues: body.error.issues }, 400);
+    setSetting(db, sourceSetting(p.id), body.data.key ? encrypt(ctx.tokenKey, body.data.key) : '');
+    clearSourceCache();
+    audit(db, c.get('user').id, 'update', 'settings', `media-source:${p.id}`, { keySet: !!body.data.key });
+    return c.json(sourceState());
+  });
+
+  // One small search: reachable and key accepted.
+  admin.post('/settings/media-sources/:id/test', adminOnly, async (c) => {
+    const p = provider(c.req.param('id'));
+    if (!p) return c.json({ error: 'Unbekannte Bilddatenbank' }, 404);
+    const key = mediaSourceKey(ctx, p.id);
+    if (p.key && !key) return c.json({ error: 'Schlüssel zuerst speichern' }, 400);
+    try {
+      const result = await p.search('Schule', p.kinds[0], 1, key);
+      // Commons gives no total: then the first page, marked as "more".
+      return c.json({ ok: true, count: result.total ?? result.hits.length, more: result.total === null && result.hasMore });
+    } catch (err) {
+      return c.json({ ok: false, error: (err as Error).message });
+    }
   });
 
   // Checks the stored connection: reachable, key valid, which scopes work.

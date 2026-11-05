@@ -67,6 +67,23 @@ Bilder und Videos lädt man im Admin unter **Medien** hoch und nutzt sie als Fol
 
 Die Dateien liegen unter `FOYER_DATA_DIR/media` (`originals/` für die Uploads, `files/` für die umgewandelten Dateien mit Inhalts-Hash im Namen). Ausgeliefert werden sie unter `/media/…` nur ins Schulnetz (`FOYER_PLAYER_NETWORKS`) und an angemeldete Benutzer. Dateien, die eine Folie noch nutzt, lassen sich nicht löschen.
 
+### Bilddatenbanken
+
+Unter **Medien → Aus Bilddatenbank** (auch im Auswahldialog einer Folie) sucht man in freien Bilddatenbanken. Ein Klick auf „Übernehmen“ lädt den Treffer auf den Server. Dort läuft er wie ein Upload durch die Mediathek: Er wird umgewandelt, bekommt ein Vorschaubild und wird über den Inhalts-Hash dedupliziert. Urheber, Quelle und Lizenz werden mit dem Medium gespeichert und in der Detailansicht verlinkt.
+
+| Datenbank | Inhalte | Lizenz | Schlüssel |
+|---|---|---|---|
+| Wikimedia Commons | Fotos, Videos | je Datei (meist CC BY / CC BY-SA, auch gemeinfrei) | keiner |
+| Openverse | Fotos aus vielen Sammlungen (u. a. Flickr, Museen) | CC-Lizenzen und gemeinfrei, je Treffer | keiner |
+| Pixabay | Fotos, Videos | Pixabay-Inhaltslizenz, keine Namensnennung | [kostenlos](https://pixabay.com/api/docs/) |
+| Unsplash | nur Fotos | Unsplash-Lizenz, keine Namensnennung | [kostenlos](https://unsplash.com/oauth/applications) |
+
+- **Bildnachweis:** Verlangt die Lizenz eine Namensnennung (CC BY, CC BY-SA, CC BY-NC …), zeigen die Displays auf jeder Folie, die das Medium als Hintergrund oder in einem Medienfeld nutzt, unten rechts eine Zeile wie „Foto: „Titel“, Name · CC BY-SA 4.0 · Wikimedia Commons“. In der Detailansicht des Mediums lässt sich das ein- und ausschalten. Ist der Nachweis Pflicht und ausgeschaltet, warnt der Admin. „NC“ heißt nur nicht kommerziell, das passt für die Schule.
+- **Schlüssel** für Pixabay und Unsplash trägt ein Admin unter **Einstellungen → Bilddatenbanken** ein. Sie liegen wie der WebUntis-Schlüssel verschlüsselt in der Datenbank, stehen nicht im Audit-Log und gehen nie an den Browser; angezeigt wird nur das Ende („…1a2b“). „Verbindung testen“ macht eine Testsuche.
+- **Nur der Server** spricht mit den Datenbanken. Die Vorschaubilder kommen über `/api/media-sources/thumb` mit signierter Adresse, die Browser im Kollegium laden also nichts von außen (CSP `img-src 'self'`). Beim Übernehmen fragt der Server die Datenbank nach der ID des Treffers und lädt nur die Datei, die sie nennt, nie eine Adresse aus dem Browser. Zugelassen ist dabei nur https zu benannten Hosts, auch bei Weiterleitungen. Suchergebnisse werden im Speicher zwischengespeichert, bei Pixabay 24 Stunden (Vorgabe der API).
+- **Größen:** Von Commons kommt bei Bildern eine 1920-px-Fassung statt des Originals, bei Videos die 1080p-WebM-Fassung. Pixabay-Videos höchstens 1080p, Unsplash-Fotos 1920 px. Pixabay sucht mit `safesearch`, Unsplash mit `content_filter=high`, Openverse ohne als „mature“ markierte Bilder; Unsplash+-Fotos sind ausgeblendet. Übernehmen dürfen Redakteure und Admins, wie beim Upload.
+- Pexels ist nicht dabei, weil es keine neuen API-Schlüssel mehr vergibt. Weitere Quellen kommen als `Provider` in [`apps/server/src/media-sources.ts`](apps/server/src/media-sources.ts) dazu.
+
 ### WebUntis: Raumanzeige und Lehrkräfte-Dashboard
 
 Die beiden Folien sind 1:1 aus wp-foyer übernommen (gleiche Darstellung, Beschriftungen und Optionen). Neu ist, wo die Daten herkommen:
@@ -86,7 +103,7 @@ Die API-Quelle ([`slide-types/_untis/api.ts`](slide-types/_untis/api.ts)) baut d
 Tests:
 
 ```bash
-npm test                                         # Unit- und API-Tests (Sicherheitsregeln, Manifest, HTML-Folie, Untis)
+npm test                                         # Unit- und API-Tests (Sicherheitsregeln, Manifest, HTML-Folie, Untis, Bilddatenbanken)
 npm run typecheck
 node tests/e2e/player-smoke.ts <player-url>      # Player in echtem Chrome (braucht Google Chrome)
 node tests/e2e/untis-compare.ts <foyer-url> <wp-foyer-checkout> <out-dir>   # Untis-Folien alt gegen neu

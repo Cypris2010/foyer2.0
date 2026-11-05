@@ -1,7 +1,8 @@
-// Media library: upload with progress, transcoding status, "used in", and a
-// picker for slide backgrounds and media fields.
+// Media library: upload with progress, import from image databases, transcoding
+// status, credits, "used in", and a picker for slide backgrounds and media fields.
 import { useEffect, useRef, useState, type DragEvent } from 'react';
 import { api, can, formatBytes, formatDuration, uploadMedia, type MediaItem, type MediaKind, type User } from './api.ts';
+import { StockSearch } from './StockSearch.tsx';
 
 const KIND_LABEL: Record<MediaKind, string> = { image: 'Bild', video: 'Video' };
 const ACCEPT: Record<MediaKind | 'all', string> = {
@@ -155,12 +156,58 @@ function MediaGrid({ items, selectedId, onSelect, disabled }: { items: MediaItem
             <span className="muted media-card__meta">
               {KIND_LABEL[item.kind]}
               {item.width && item.height ? ` · ${item.width}×${item.height}` : ''}
+              {item.source ? ` · ${item.source.license}` : ''}
               {item.status === 'failed' ? ' · Fehler' : item.usageCount ? ` · ${item.usageCount}× verwendet` : ''}
             </span>
           </button>
         </li>
       ))}
     </ul>
+  );
+}
+
+const external = (href: string | null, text: string) =>
+  href ? (
+    <a href={href} target="_blank" rel="noreferrer">{text}</a>
+  ) : (
+    text
+  );
+
+/** Author, source and license of an imported item; the credit line for displays. */
+function SourceInfo({ item, editable, onCredit }: { item: MediaItem; editable: boolean; onCredit: (show: boolean) => void }) {
+  const source = item.source!;
+  return (
+    <>
+      <h3>Herkunft</h3>
+      <table className="table media-info">
+        <tbody>
+          <tr><th>Urheber</th><td>{external(source.authorUrl, source.author ?? 'unbekannt')}</td></tr>
+          {source.title && <tr><th>Titel</th><td>{source.title}</td></tr>}
+          <tr>
+            <th>Quelle</th>
+            <td>
+              {external(source.pageUrl, source.via)}
+              {source.via !== source.providerName && <span className="muted"> (gefunden über {source.providerName})</span>}
+            </td>
+          </tr>
+          <tr>
+            <th>Lizenz</th>
+            <td>
+              {external(source.licenseUrl, source.license)}
+              <div className="muted">{source.attribution ? 'Namensnennung ist Pflicht, wo das Medium gezeigt wird.' : 'Keine Namensnennung nötig.'}</div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <label className="field--check credit-toggle">
+        <input type="checkbox" checked={item.showCredit} disabled={!editable} onChange={(e) => onCredit(e.target.checked)} />
+        <span>Bildnachweis auf den Displays zeigen</span>
+      </label>
+      <p className="credit-preview">{item.credit}</p>
+      {source.attribution && !item.showCredit && (
+        <p className="error">Die Lizenz verlangt den Bildnachweis. Ohne ihn darf das Medium nur gezeigt werden, wenn der Nachweis anders sichtbar ist.</p>
+      )}
+    </>
   );
 }
 
@@ -192,6 +239,14 @@ function MediaDetail({ id, user, onChanged, onClose, onError }: { id: string; us
       await api.patch(`/media/${id}`, { name });
       await load();
       onChanged();
+    } catch (e) {
+      onError(e);
+    }
+  };
+  const setCredit = async (showCredit: boolean) => {
+    try {
+      await api.patch(`/media/${id}`, { showCredit });
+      await load();
     } catch (e) {
       onError(e);
     }
@@ -258,9 +313,10 @@ function MediaDetail({ id, user, onChanged, onClose, onError }: { id: string; us
               <td>{v.width} × {v.height} px{item.kind === 'video' ? ` · H.264${key === 'main' ? ', ≤ 30 fps' : ''}` : ''}</td>
             </tr>
           ))}
-          <tr><th>Hochgeladen</th><td>{new Date(item.createdAt).toLocaleString('de-DE')}</td></tr>
+          <tr><th>{item.source ? 'Übernommen' : 'Hochgeladen'}</th><td>{new Date(item.createdAt).toLocaleString('de-DE')}</td></tr>
         </tbody>
       </table>
+      {item.source && <SourceInfo item={item} editable={editable} onCredit={setCredit} />}
       <h3>Verwendet in</h3>
       {used.length ? (
         <ul className="usage">
@@ -286,31 +342,52 @@ function MediaDetail({ id, user, onChanged, onClose, onError }: { id: string; us
 export function MediaPage({ user, onError }: { user: User; onError: (e: unknown) => void }) {
   const [kind, setKind] = useState<MediaKind | 'all'>('all');
   const [selected, setSelected] = useState<string | null>(null);
+  const [searching, setSearching] = useState(false);
   const { items, loaded, reload } = useMediaList(kind, onError);
+  const editor = can(user, 'editor');
 
   return (
     <section className={selected ? 'split split--media' : 'overview'}>
       <div className="list">
         <h1>Medien</h1>
-        <div className="row">
-          {(['all', 'image', 'video'] as const).map((k) => (
-            <button key={k} className={kind === k ? 'active' : ''} onClick={() => setKind(k)}>
-              {k === 'all' ? 'Alle' : k === 'image' ? 'Bilder' : 'Videos'}
-            </button>
-          ))}
-        </div>
-        {can(user, 'editor') && (
-          <Uploader
-            kind="all"
+        {editor && (
+          <div className="row tabs">
+            <button className={!searching ? 'active' : ''} onClick={() => setSearching(false)}>Mediathek</button>
+            <button className={searching ? 'active' : ''} onClick={() => setSearching(true)}>Aus Bilddatenbank</button>
+          </div>
+        )}
+        {searching && editor ? (
+          <StockSearch
             onError={onError}
-            onUploaded={(item) => {
+            onOpen={setSelected}
+            onImported={(item) => {
               void reload();
-              if (!selected) setSelected(item.id);
+              setSelected(item.id);
             }}
           />
+        ) : (
+          <>
+            <div className="row">
+              {(['all', 'image', 'video'] as const).map((k) => (
+                <button key={k} className={kind === k ? 'active' : ''} onClick={() => setKind(k)}>
+                  {k === 'all' ? 'Alle' : k === 'image' ? 'Bilder' : 'Videos'}
+                </button>
+              ))}
+            </div>
+            {can(user, 'editor') && (
+              <Uploader
+                kind="all"
+                onError={onError}
+                onUploaded={(item) => {
+                  void reload();
+                  if (!selected) setSelected(item.id);
+                }}
+              />
+            )}
+            {loaded && !items.length && <p className="muted">Noch keine {kind === 'image' ? 'Bilder' : kind === 'video' ? 'Videos' : 'Medien'}.</p>}
+            <MediaGrid items={items} selectedId={selected} onSelect={(item) => setSelected(item.id)} />
+          </>
         )}
-        {loaded && !items.length && <p className="muted">Noch keine {kind === 'image' ? 'Bilder' : kind === 'video' ? 'Videos' : 'Medien'}.</p>}
-        <MediaGrid items={items} selectedId={selected} onSelect={(item) => setSelected(item.id)} />
       </div>
       {selected && (
         <div className="detail">
@@ -324,6 +401,8 @@ export function MediaPage({ user, onError }: { user: User; onError: (e: unknown)
 /** Modal to choose one item of a kind; uploading right here is possible too. */
 export function MediaPicker({ kind, user, onPick, onClose, onError }: { kind: MediaKind; user: User; onPick: (item: MediaItem) => void; onClose: () => void; onError: (e: unknown) => void }) {
   const { items, loaded, reload } = useMediaList(kind, onError);
+  const [searching, setSearching] = useState(false);
+  const editor = can(user, 'editor');
   return (
     <div className="modal" onClick={onClose}>
       <div className="modal__box modal__box--wide" onClick={(e) => e.stopPropagation()}>
@@ -331,11 +410,31 @@ export function MediaPicker({ kind, user, onPick, onClose, onError }: { kind: Me
           <h2>{kind === 'image' ? 'Bild wählen' : 'Video wählen'}</h2>
           <button onClick={onClose}>×</button>
         </div>
-        {can(user, 'editor') && <Uploader kind={kind} onError={onError} onUploaded={() => void reload()} />}
-        {loaded && !items.length && <p className="muted">Noch keine {kind === 'image' ? 'Bilder' : 'Videos'} in der Mediathek.</p>}
-        <div className="picker-grid">
-          <MediaGrid items={items} onSelect={onPick} disabled={(item) => item.status === 'failed'} />
-        </div>
+        {editor && (
+          <div className="row tabs" style={{ margin: 0 }}>
+            <button className={!searching ? 'active' : ''} onClick={() => setSearching(false)}>Mediathek</button>
+            <button className={searching ? 'active' : ''} onClick={() => setSearching(true)}>Aus Bilddatenbank</button>
+          </div>
+        )}
+        {searching && editor ? (
+          <div className="picker-grid">
+            <StockSearch
+              kind={kind}
+              actionLabel="Übernehmen und wählen"
+              onError={onError}
+              onImported={onPick}
+              onOpen={(id) => void api.get<MediaItem>(`/media/${id}`).then(onPick, onError)}
+            />
+          </div>
+        ) : (
+          <>
+            {editor && <Uploader kind={kind} onError={onError} onUploaded={() => void reload()} />}
+            {loaded && !items.length && <p className="muted">Noch keine {kind === 'image' ? 'Bilder' : 'Videos'} in der Mediathek.</p>}
+            <div className="picker-grid">
+              <MediaGrid items={items} onSelect={onPick} disabled={(item) => item.status === 'failed'} />
+            </div>
+          </>
+        )}
         {kind === 'video' && <p className="muted">Videos, die noch umgewandelt werden, kann man schon wählen. Die Displays zeigen sie, sobald sie fertig sind.</p>}
       </div>
     </div>

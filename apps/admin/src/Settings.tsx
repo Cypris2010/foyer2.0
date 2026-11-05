@@ -1,4 +1,5 @@
-// Central settings (admins only): connections to outside services.
+// Central settings (admins only): connections to outside services
+// (WebUntis-API, image databases for the media library).
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, type User } from './api.ts';
 
@@ -128,10 +129,145 @@ function UntisApiSettings({ onError }: { onError: (e: unknown) => void }) {
   );
 }
 
+interface MediaSourceState {
+  id: string;
+  name: string;
+  kinds: Array<'image' | 'video'>;
+  terms: string;
+  homepage: string;
+  needsKey: boolean;
+  /** Where to get a key. */
+  signup: string | null;
+  placeholder: string | null;
+  keySet: boolean;
+  keyHint: string | null;
+  keyUnreadable: boolean;
+}
+
+/** One image database: key (if it needs one) and a connection test. */
+function MediaSourceCard({ source, onSaved, onError }: { source: MediaSourceState; onSaved: (all: MediaSourceState[]) => void; onError: (e: unknown) => void }) {
+  const [key, setKey] = useState('');
+  const [saved, setSaved] = useState(false);
+  const [test, setTest] = useState<(Check & { more?: boolean }) | null>(null);
+  const [testing, setTesting] = useState(false);
+  const ready = !source.needsKey || source.keySet;
+
+  const runTest = async () => {
+    setTesting(true);
+    setTest(null);
+    try {
+      setTest(await api.post<Check & { more?: boolean }>(`/settings/media-sources/${source.id}/test`));
+    } catch (e) {
+      setTest({ ok: false, error: (e as Error).message });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const store = async (value: string) => {
+    try {
+      onSaved(await api.put<MediaSourceState[]>(`/settings/media-sources/${source.id}`, { key: value }));
+      setKey('');
+      setTest(null);
+      if (value) {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+      }
+    } catch (e) {
+      onError(e);
+    }
+  };
+
+  const save = (e: FormEvent) => {
+    e.preventDefault();
+    if (key.trim()) void store(key.trim());
+  };
+
+  const removeKey = () => {
+    if (!confirm(`API-Schlüssel für ${source.name} löschen? Die Suche dort geht dann nicht mehr; übernommene Medien bleiben.`)) return;
+    void store('');
+  };
+
+  return (
+    <div className="media-source">
+      <header>
+        <strong>{source.name}</strong>
+        <span className="muted"> · {source.kinds.map((k) => (k === 'image' ? 'Bilder' : 'Videos')).join(' und ')}</span>
+        <span className={ready ? 'badge ok' : 'badge off'}>{!source.needsKey ? 'ohne Schlüssel' : source.keySet ? 'eingerichtet' : 'kein Schlüssel'}</span>
+      </header>
+      <p className="muted">{source.terms}</p>
+      {source.needsKey && (
+        <form className="form" onSubmit={save}>
+          <label className="field">
+            <span>
+              API-Schlüssel
+              {source.keySet && ` (gespeichert: ${source.keyHint}; neuen eingeben, um ihn zu ersetzen)`}
+              {source.keyUnreadable && ' (gespeicherter Schlüssel nicht mehr lesbar, bitte neu eingeben)'}
+              {source.signup && (
+                <>
+                  {' · '}
+                  <a href={source.signup} target="_blank" rel="noreferrer">Schlüssel beantragen</a>
+                </>
+              )}
+            </span>
+            <input
+              type="password"
+              autoComplete="off"
+              spellCheck={false}
+              placeholder={source.keySet ? '••••••••' : (source.placeholder ?? '')}
+              value={key}
+              onChange={(e) => setKey(e.target.value)}
+            />
+          </label>
+          <div className="row" style={{ margin: 0 }}>
+            <button className="primary" type="submit" disabled={!key.trim()}>Speichern</button>
+            <button type="button" disabled={!ready || testing} onClick={() => void runTest()}>{testing ? 'Teste …' : 'Verbindung testen'}</button>
+            {source.keySet && <button type="button" className="danger" onClick={removeKey}>Schlüssel löschen</button>}
+            {saved && <span className="saved">Gespeichert</span>}
+          </div>
+        </form>
+      )}
+      {!source.needsKey && (
+        <div className="row" style={{ margin: 0 }}>
+          <button type="button" disabled={testing} onClick={() => void runTest()}>{testing ? 'Teste …' : 'Verbindung testen'}</button>
+        </div>
+      )}
+      {test && (
+        <p>
+          <span className={test.ok ? 'badge ok' : 'badge bad'}>{test.ok ? '✓' : '✗'}</span>{' '}
+          {test.ok ? `Erreichbar, Testsuche „Schule“: ${test.count.toLocaleString('de-DE')}${test.more ? '+' : ''} Treffer` : test.error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function MediaSourceSettings({ onError }: { onError: (e: unknown) => void }) {
+  const [sources, setSources] = useState<MediaSourceState[] | null>(null);
+  useEffect(() => void api.get<MediaSourceState[]>('/settings/media-sources').then(setSources, onError), []);
+  if (!sources) return null;
+  return (
+    <section className="card card--wide">
+      <header>
+        <h2>Bilddatenbanken</h2>
+      </header>
+      <p className="muted">
+        Redakteure suchen unter <strong>Medien → Aus Bilddatenbank</strong> und übernehmen Treffer mit einem Klick in die Mediathek. Urheber,
+        Quelle und Lizenz werden mitgespeichert. Verlangt die Lizenz eine Namensnennung (z. B. CC BY), zeigen die Displays einen Bildnachweis.
+        Schlüssel werden verschlüsselt gespeichert und nicht wieder angezeigt.
+      </p>
+      {sources.map((source) => (
+        <MediaSourceCard key={source.id} source={source} onSaved={setSources} onError={onError} />
+      ))}
+    </section>
+  );
+}
+
 export function SettingsPage({ onError }: { user: User; onError: (e: unknown) => void }) {
   return (
     <div className="cards">
       <UntisApiSettings onError={onError} />
+      <MediaSourceSettings onError={onError} />
     </div>
   );
 }
