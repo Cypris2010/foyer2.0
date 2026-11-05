@@ -7,7 +7,7 @@ const RETRY_KEY = 'foyer-update-reload';
 const RETRY_MS = 10 * 60_000;
 
 /** File name of the bundle this page runs, e.g. "index-B2m0qTK9.js"; null in development. */
-function ownBuild(): string | null {
+export function ownBuild(): string | null {
   const script = document.querySelector('script[src*="/player/assets/"]');
   const src = script ? script.getAttribute('src') || '' : '';
   return src ? src.split('/').pop() || null : null;

@@ -28,6 +28,8 @@ export interface Display {
   wallId: string | null;
   wallRow: number | null;
   wallCol: number | null;
+  /** Test pattern on screen right now (started on this display or wall). */
+  testPattern: { index: number; count: number; name: string; hint: string; until: number } | null;
 }
 
 export interface Channel {

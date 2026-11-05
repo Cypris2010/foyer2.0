@@ -69,6 +69,29 @@ function useCardActions(display: Display, onChanged: () => void, onError: (e: un
   return { saved, run, patch };
 }
 
+/** Test patterns: stepped through by hand, end by themselves after 10 minutes. */
+function TestPatternControls({ display, run }: { display: Display; run: (action: () => Promise<unknown>) => unknown }) {
+  const send = (action: 'start' | 'next' | 'prev' | 'stop') => run(() => api.post(`/displays/${display.id}/test-pattern`, { action }));
+  const test = display.testPattern;
+  if (!test) {
+    return (
+      <button onClick={() => send('start')} title="Testbilder für Ausrichtung, Rahmen, Farben und Synchronität">
+        Testbild
+      </button>
+    );
+  }
+  return (
+    <div className="test-pattern" role="group" aria-label="Testbild">
+      <button onClick={() => send('prev')} aria-label="Vorheriges Testbild">◀</button>
+      <span className="test-pattern__name" title={test.hint}>
+        {test.index + 1}/{test.count} {test.name}
+      </span>
+      <button onClick={() => send('next')} aria-label="Nächstes Testbild">▶</button>
+      <button onClick={() => send('stop')}>Beenden</button>
+    </div>
+  );
+}
+
 function DisplayCard({ display, displays, channels, user, onChanged, onReveal, onError }: CardProps) {
   const { saved, run, patch } = useCardActions(display, onChanged, onError);
   const channel = channels.find((c) => c.id === display.defaultChannelId);
@@ -125,6 +148,7 @@ function DisplayCard({ display, displays, channels, user, onChanged, onReveal, o
             Identifizieren
           </button>
           <button onClick={() => run(() => api.post(`/displays/${display.id}/reload`))}>Neu laden</button>
+          <TestPatternControls display={display} run={run} />
           {saved && <span className="saved">Gespeichert ✓</span>}
         </div>
       )}
@@ -267,6 +291,7 @@ function WallCard({ display, displays, channels, user, onChanged, onError }: Omi
               Identifizieren
             </button>
             <button onClick={() => run(() => api.post(`/displays/${display.id}/reload`))}>Neu laden</button>
+            <TestPatternControls display={display} run={run} />
             {saved && <span className="saved">Gespeichert ✓</span>}
           </div>
           <details className="settings">

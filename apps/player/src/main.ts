@@ -4,7 +4,8 @@ import { Ticker } from './ticker.ts';
 import { ServerClock } from './clock.ts';
 import { followWall, inWallFrame, isWallShell, reloadScreen, runWallShell, wallOverlay, type Wall } from './wall.ts';
 import { withSlideData, withoutSlideData } from './data.ts';
-import { createUpdateCheck } from './update.ts';
+import { createUpdateCheck, ownBuild } from './update.ts';
+import { createTestPattern } from './testpattern.ts';
 import type { Manifest } from './types.ts';
 
 const HEARTBEAT_MS = 30_000;
@@ -81,6 +82,13 @@ if (!endpoints) {
   }, now);
   if (clock) clock.onShift = () => ticker.resync();
 
+  const testPattern = createTestPattern(now, () => ({
+    name: wall?.screen ?? (ticker.displayName || 'Foyer'),
+    wall,
+    build: ownBuild(),
+    clockOffset: now() - Date.now(),
+  }));
+
   const cached = loadCachedManifest(endpoints.cacheKey);
   // Part of a wall (cold start): straight into the wall shell.
   const leaving = cached?.wall && !inWallFrame && endpoints.mode === 'display';
@@ -103,6 +111,7 @@ if (!endpoints) {
     source?.close();
     source = null;
     ticker.clear();
+    testPattern.show(null);
     notice(message);
   };
 
@@ -179,6 +188,7 @@ if (!endpoints) {
       // Connected again (e.g. after a server restart, which forgets what we show).
       source.addEventListener('hello', reportNowPlaying);
       source.addEventListener('reload', reloadScreen);
+      source.addEventListener('test-pattern', (event) => testPattern.show(JSON.parse((event as MessageEvent).data)));
       source.addEventListener('identify', () =>
         notice(wall ? `${wall.screen} · ${wall.name}, Zeile ${wall.row + 1}, Spalte ${wall.col + 1}` : ticker.displayName || 'Foyer', 10_000),
       );

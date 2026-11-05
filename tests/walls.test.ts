@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { json, setup } from './helpers.ts';
 import { wallGeometry } from '../apps/player/src/wall.ts';
+import { wallCells } from '../apps/player/src/testpattern.ts';
+import { TEST_PATTERNS } from '../packages/slide-sdk/src/test-patterns.ts';
 
 // Aula (d1, aus helpers) plus ein zweites Display und eine Wand 1 × 2.
 async function wallSetup() {
@@ -111,5 +113,61 @@ describe('Wand-Zuschnitt', () => {
     expect(wallGeometry(wall, 1920, 1080)).toEqual({ width: 3860, height: 2180, x: -1940, y: -1100 });
     expect(wallGeometry({ ...wall, row: 0, col: 0 }, 1920, 1080)).toMatchObject({ x: -0, y: -0 });
     expect(wallGeometry({ ...wall, rows: 1, cols: 2, row: 0, col: 1, bezel: 0 }, 1920, 1080)).toEqual({ width: 3840, height: 1080, x: -1920, y: -0 });
+  });
+});
+
+describe('Testbilder', () => {
+  const step = (app: any, id: string, action: string, cookie: string) =>
+    app.request(`/api/displays/${id}/test-pattern`, json('POST', { action }, cookie)).then((res: Response) => res.json());
+
+  it('schaltet von Hand durch und endet nach 10 Minuten von selbst', async () => {
+    const { app, loginAs, advance } = await setup();
+    const editor = await loginAs('editor');
+    expect((await step(app, 'd1', 'start', editor)).testPattern).toMatchObject({ index: 0, name: 'Gitter', count: TEST_PATTERNS.length });
+    expect((await step(app, 'd1', 'next', editor)).testPattern.index).toBe(1);
+    await step(app, 'd1', 'prev', editor);
+    // Vor dem ersten kommt das letzte.
+    expect((await step(app, 'd1', 'prev', editor)).testPattern.index).toBe(TEST_PATTERNS.length - 1);
+    const list = async () => (await (await app.request('/api/displays', { headers: { cookie: editor } })).json())[0].testPattern;
+    expect((await list()).name).toBe(TEST_PATTERNS.at(-1)!.name);
+    advance(10 * 60_000 + 1);
+    expect(await list()).toBeNull();
+    expect((await step(app, 'd1', 'stop', editor)).testPattern).toBeNull();
+    // Nur Redaktion und Admins
+    expect((await app.request('/api/displays/d1/test-pattern', json('POST', { action: 'start' }, await loginAs('viewer')))).status).toBe(403);
+  });
+
+  it('gibt Testbilder der Wand an ihre Displays weiter', async () => {
+    const { app, ctx, admin, cells, second, wallId } = await wallSetup();
+    await cells([['d1', 0, 0], [second.id, 0, 1]]);
+    const received: unknown[] = [];
+    ctx.events.subscribe(second.id, (event, data) => event === 'test-pattern' && received.push(data));
+    await step(app, wallId, 'start', admin);
+    await step(app, wallId, 'stop', admin);
+    expect(received).toEqual([{ index: 0, until: ctx.now() + 10 * 60_000 }, null]);
+  });
+
+  it('zeigt das Testbild nach einer Neuverbindung wieder', async () => {
+    const { app, admin, cells, token, wallId } = await wallSetup();
+    await cells([['d1', 0, 0]]);
+    await step(app, wallId, 'start', admin);
+    const res = await app.request(`/api/player/${token}/events`);
+    const reader = res.body!.getReader();
+    let text = '';
+    while (!text.includes('test-pattern')) text += new TextDecoder().decode((await reader.read()).value);
+    await reader.cancel();
+    expect(text).toContain('event: test-pattern');
+    expect(text).toContain('"index":0');
+  });
+});
+
+describe('Testbild-Raster', () => {
+  it('kennt die Bildschirme der Wand samt Rahmen', () => {
+    const cells = wallCells(3860, 1080, { id: 'w', name: 'Wand', rows: 1, cols: 2, row: 0, col: 1, bezel: 20, screen: 'rechts' });
+    expect(cells).toEqual([
+      { x: 0, y: 0, w: 1920, h: 1080, row: 0, col: 0 },
+      { x: 1940, y: 0, w: 1920, h: 1080, row: 0, col: 1 },
+    ]);
+    expect(wallCells(1920, 1080, null)).toHaveLength(1);
   });
 });

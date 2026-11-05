@@ -17,6 +17,7 @@ import { getCookie } from 'hono/cookie';
 import { clientIp, ipAllowed } from './net.ts';
 import { audit, transaction } from './db.ts';
 import { decrypt, encrypt, randomToken, safeEqual, sha256 } from './crypto.ts';
+import { TEST_PATTERNS, type TestPatternState } from '@foyer/slide-sdk/test-patterns';
 import { affectedDisplays, MAX_WALL_SIDE, setWallCells, trimWall, WallError, wallScreens } from './walls.ts';
 import { buildManifest, buildSlideEntry, dataSignature, documentSignature, DISPLAY_COLUMNS, slideData, type DisplayRow, type SlideRow } from './manifest.ts';
 import { parseConfig } from './registry.ts';
@@ -43,6 +44,9 @@ const displayCreate = z.object({
   rows: wallSide.default(1),
   cols: wallSide.default(2),
 });
+const testPatternBody = z.object({ action: z.enum(['start', 'next', 'prev', 'stop']) });
+// A forgotten test pattern ends by itself and the programme continues.
+const TEST_PATTERN_MS = 10 * 60_000;
 const wallCells = z.object({
   cells: z.array(z.object({ displayId: z.string(), row: z.number().int().min(0), col: z.number().int().min(0) })).max(MAX_WALL_SIDE ** 2),
 });
@@ -127,23 +131,41 @@ export interface AppOptions {
   remoteAddress?: (c: Context) => string;
 }
 
+/** For the admin: which test pattern runs, by name. */
+function testPatternInfo(state: TestPatternState | null) {
+  if (!state) return null;
+  const pattern = TEST_PATTERNS[state.index];
+  return { index: state.index, count: TEST_PATTERNS.length, name: pattern.name, hint: pattern.hint, until: state.until };
+}
+
 export function createApp(ctx: AppContext, options: AppOptions = {}) {
   const { db, registry, events } = ctx;
   const app = new Hono<Env>();
   const remote = options.remoteAddress ?? (() => '127.0.0.1');
+  // Test patterns by the display (or wall) the admin started them on; live state.
+  const testPatterns = new Map<string, TestPatternState>();
+  const activeTest = (displayId: string): TestPatternState | null => {
+    const state = testPatterns.get(displayId);
+    if (state && state.until > ctx.now()) return state;
+    testPatterns.delete(displayId);
+    return null;
+  };
+
   // Last slide each display reported; in memory only, it is live state.
   const nowPlaying = new Map<string, { slideId: string | null; version: string | null; at: number }>();
   const leases = new LeaseTable();
   // Finished transcodes change what slides show: players fetch the manifest again.
   ctx.media.onReady = () => events.broadcast('manifest-changed');
 
-  const sseStream = (c: Context, key: string) =>
+  /** initial: events a (re)connecting client must not miss, sent after "hello". */
+  const sseStream = (c: Context, key: string, initial: () => Array<{ event: string; data: unknown }> = () => []) =>
     streamSSE(c, async (stream) => {
       const unsubscribe = events.subscribe(key, (event, data) => {
         void stream.writeSSE({ event, data: JSON.stringify(data ?? {}) });
       });
       stream.onAbort(unsubscribe);
       await stream.writeSSE({ event: 'hello', data: '{}' });
+      for (const { event, data } of initial()) await stream.writeSSE({ event, data: JSON.stringify(data) });
       while (!stream.aborted) {
         await stream.sleep(25_000);
         if (!stream.aborted) await stream.writeSSE({ event: 'ping', data: '{}' });
@@ -284,6 +306,7 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
           wallId: r.wall_id,
           wallRow: r.wall_row,
           wallCol: r.wall_col,
+          testPattern: testPatternInfo(activeTest(r.id)),
         };
       }),
     );
@@ -428,6 +451,28 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
     const targets = affectedDisplays(db, c.req.param('id'));
     for (const target of targets) events.send(target, 'reload');
     return c.json({ ok: true, connected: targets.reduce((sum, target) => sum + events.connected(target), 0) });
+  });
+
+  // Test patterns, stepped through by hand; a wall passes them to its screens.
+  admin.post('/displays/:id/test-pattern', editor, async (c) => {
+    const body = testPatternBody.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return badRequest(c, body.error);
+    const displayId = c.req.param('id');
+    if (!db.prepare('SELECT 1 FROM displays WHERE id = ?').get(displayId)) return c.json({ error: 'Nicht gefunden' }, 404);
+    const current = activeTest(displayId);
+    const count = TEST_PATTERNS.length;
+    const { action } = body.data;
+    const state: TestPatternState | null =
+      action === 'stop'
+        ? null
+        : {
+            index: action === 'start' || !current ? 0 : (current.index + (action === 'next' ? 1 : count - 1)) % count,
+            until: ctx.now() + TEST_PATTERN_MS,
+          };
+    if (state) testPatterns.set(displayId, state);
+    else testPatterns.delete(displayId);
+    for (const target of affectedDisplays(db, displayId)) events.send(target, 'test-pattern', state);
+    return c.json({ testPattern: testPatternInfo(state) });
   });
 
   admin.post('/displays/:id/identify', editor, (c) => {
@@ -730,7 +775,11 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
   player.get('/:token/events', (c) => {
     const display = c.get('display');
     db.prepare('UPDATE displays SET last_seen_at = ? WHERE id = ?').run(ctx.now(), display.id);
-    return sseStream(c, display.id);
+    // Reconnected during a test: show it again (its own, else its wall's).
+    return sseStream(c, display.id, () => {
+      const test = activeTest(display.id) ?? (display.wall_id ? activeTest(display.wall_id) : null);
+      return test ? [{ event: 'test-pattern', data: test }] : [];
+    });
   });
 
   app.route('/api/player', player);
