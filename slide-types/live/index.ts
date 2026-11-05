@@ -3,6 +3,12 @@ import { defineSlideType } from '@foyer/slide-sdk';
 
 // Protocols ffmpeg pulls from; the server converts every source to the display profile.
 const STREAM_URL = /^(rtsps?|rtmps?|srt|udp|rtp|https?):\/\/\S+$/i;
+export const NDI_GROUP = /^[\p{L}\p{N} _.-]+$/u;
+
+/** "public, lgstv" → ["public", "lgstv"]; empty = the server's default groups. */
+export function ndiGroupList(text: string): string[] {
+  return [...new Set(text.split(',').map((g) => g.trim()).filter(Boolean))];
+}
 
 export const config = z
   .object({
@@ -12,6 +18,12 @@ export const config = z
       .describe('Quelle')
       // "NDI" with ndi.video next to it: required by the NDI SDK licence wherever NDI is selected.
       .meta({ labels: { ndi: 'NDI im Schulnetz (NDI® · ndi.video)', url: 'Stream-Adresse (RTSP, SRT, RTMP, HLS, UDP …)' } }),
+    ndiGroups: z
+      .string()
+      .max(300)
+      .default('')
+      .describe('NDI-Gruppen, in denen gesucht wird (kommagetrennt, z. B. public, lgstv; leer = Einstellung des Servers)')
+      .meta({ visibleIf: { source: 'ndi' } }),
     ndiName: z
       .string()
       .max(300)
@@ -40,6 +52,9 @@ export const config = z
   .superRefine((value, ctx) => {
     if (value.source === 'ndi' && !value.ndiName.trim()) {
       ctx.addIssue({ code: 'custom', path: ['ndiName'], message: 'Bitte eine NDI-Quelle wählen' });
+    }
+    if (value.source === 'ndi' && !ndiGroupList(value.ndiGroups).every((g) => NDI_GROUP.test(g))) {
+      ctx.addIssue({ code: 'custom', path: ['ndiGroups'], message: 'Gruppen mit Komma trennen; erlaubt sind Buchstaben, Ziffern, Leerzeichen, - _ .' });
     }
     if (value.source === 'url' && !STREAM_URL.test(value.url.trim())) {
       ctx.addIssue({ code: 'custom', path: ['url'], message: 'Bitte eine Adresse mit rtsp://, srt://, rtmp://, udp://, rtp:// oder http(s):// eintragen' });

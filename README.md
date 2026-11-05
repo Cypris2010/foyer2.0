@@ -62,6 +62,7 @@ Konfiguration über Umgebungsvariablen (siehe `apps/server/src/config.ts`):
 | `FOYER_LIVE_PORT` | `8189` | WebRTC-Bild der Live-Folien (UDP, ersatzweise TCP); muss von den Displays erreichbar sein |
 | `FOYER_LIVE_HOSTS` | – | Zusätzliche Adressen, die den Displays fürs Bild genannt werden (z. B. die LAN-IP, wenn der Server hinter NAT läuft) |
 | `FOYER_NDI_EXTRA_IPS` | – | NDI-Sender in anderen Subnetzen (dorthin reicht mDNS nicht) |
+| `FOYER_NDI_GROUPS` | – (nur `public`) | NDI-Gruppen, in denen gesucht wird, z. B. `public,lgstv` |
 | `FOYER_LIVE_LOCAL_PORTS` | `18550` | Erster von drei Ports, die der Streaming-Server nur auf 127.0.0.1 belegt |
 
 ### Live-Video
@@ -96,6 +97,7 @@ docker compose -f deploy/compose.yaml exec foyer node apps/server/src/cli.ts ndi
 - `NDI_LICENSE=accept` bestätigt die [NDI-SDK-Lizenz](https://docs.ndi.video/docs/sdk/licensing). Ohne das bricht der Build ab.
 - So ein Image enthält ein **nonfree-ffmpeg und das NDI-SDK**: auf dem eigenen Server nutzen, **nie in eine öffentliche Registry pushen** oder weitergeben. Andere Schulen bauen ihr Image selbst.
 - NDI findet Quellen per mDNS/Multicast über den **avahi-daemon des Hosts** (`apt install avahi-daemon`; die Compose-Datei bindet dafür `/run/dbus` ein). Der Container läuft deshalb mit `network_mode: host`, und der Server muss im selben Netz wie die NDI-Quellen stehen. Quellen in anderen Subnetzen trägt man in `FOYER_NDI_EXTRA_IPS` ein (testen mit `ndi:sources 10.48.20.5,10.48.20.9`); das geht auch ohne Avahi.
+- **NDI-Gruppen:** Jede Quelle meldet sich in einer oder mehreren Gruppen an, und der Server findet ohne Einstellung nur die Quellen in `public`. Fehlen Quellen in der Liste, liegen sie oft in einer anderen Gruppe. Die Gruppen stehen in `FOYER_NDI_GROUPS`; `public` muss dabei mit aufgeführt werden, wenn man diese Quellen weiter sehen will (`public,lgstv`). Testen mit `ndi:sources --groups public,lgstv`. Eine einzelne Folie kann im Feld **NDI-Gruppen** eigene Gruppen haben; sie gelten dann für „Quellen suchen“ und das Abspielen dieser Folie statt der Server-Einstellung. Foyer schreibt dafür `FOYER_DATA_DIR/ndi/ndi-config.v1.json` und setzt `NDI_CONFIG_DIR`. Gruppen filtern nur die Suche, sie sind kein Zugriffsschutz.
 - Ohne Docker auf Debian/Ubuntu: `sudo NDI_LICENSE=accept deploy/ffmpeg-ndi/build.sh`.
 - Beim Start meldet der Server `NDI-Eingang verfügbar`, wenn er das NDI-ffmpeg gefunden hat.
 

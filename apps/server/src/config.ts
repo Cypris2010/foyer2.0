@@ -48,6 +48,8 @@ export const config = {
   // First of three ports MediaMTX uses on 127.0.0.1 (RTSP ingest, WHEP, API).
   liveLocalPorts: Number(process.env.FOYER_LIVE_LOCAL_PORTS ?? 18550),
   ndiExtraIps: list(process.env.FOYER_NDI_EXTRA_IPS, []),
+  // NDI groups to search; empty = the NDI default ("public").
+  ndiGroups: list(process.env.FOYER_NDI_GROUPS, []),
   mediaMaxMb: Number(process.env.FOYER_MEDIA_MAX_MB ?? 2048),
   sessionIdleHours: 8,
   sessionMaxDays: 7,

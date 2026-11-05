@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { setup } from './helpers.ts';
 import { ingestArgs, LiveGateway, livePathName, mediamtxConfig, type LiveOptions } from '../apps/server/src/live.ts';
 import type { LiveInput } from '@foyer/slide-sdk';
+import { config as liveConfig } from '../slide-types/live/index.ts';
+import liveServer from '../slide-types/live/server.ts';
 
 const options: LiveOptions = {
   mediamtx: '/opt/mediamtx/mediamtx',
@@ -22,6 +24,18 @@ describe('Live-Gateway', () => {
     expect(livePathName(ndi)).toBe(livePathName({ ...ndi }));
     expect(livePathName(ndi)).not.toBe(livePathName({ ...ndi, profile: '1080p30' }));
     expect(livePathName(ndi)).toMatch(/^live_[0-9a-f]{20}$/);
+  });
+
+  it('trennt Umwandlungen derselben NDI-Quelle aus verschiedenen Gruppen', () => {
+    expect(livePathName({ ...ndi, groups: ['lgstv'] })).not.toBe(livePathName(ndi));
+    expect(livePathName({ ...ndi, groups: [] })).toBe(livePathName(ndi));
+  });
+
+  it('nimmt die NDI-Gruppen der Folie mit und prüft ihre Namen', () => {
+    const slide = liveConfig.parse({ source: 'ndi', ndiName: 'AULA (Program)', ndiGroups: ' public, lgstv ,lgstv' });
+    expect(liveServer.live!(slide)).toEqual({ kind: 'ndi', value: 'AULA (Program)', groups: ['public', 'lgstv'], profile: '720p30', audio: false });
+    expect(liveServer.live!(liveConfig.parse({ source: 'ndi', ndiName: 'AULA (Program)' }))).not.toHaveProperty('groups');
+    expect(liveConfig.safeParse({ source: 'ndi', ndiName: 'AULA', ndiGroups: 'lgstv"}' }).success).toBe(false);
   });
 
   it('gibt Quellnamen unverändert als ein Argument an ffmpeg (keine Shell)', () => {

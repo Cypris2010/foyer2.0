@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { MediaLibrary } from './media.ts';
 import { playerBuildReader } from './player-build.ts';
 import { LiveGateway } from './live.ts';
-import { findNdiSources, ndiAvailable } from './ndi.ts';
+import { findNdiSources, ndiAvailable, ndiConfigDir, useNdiGroups } from './ndi.ts';
 
 export function contentSecret(db: Db): string {
   let secret = getSetting(db, 'content_secret');
@@ -28,6 +28,7 @@ export async function createContext(db: Db = openDb(config.dataDir)): Promise<Ap
     maxBytes: config.mediaMaxMb * 1048576,
   });
   media.resume();
+  useNdiGroups(join(config.dataDir, 'ndi'), config.ndiGroups);
   const live = new LiveGateway({
     mediamtx: config.mediamtx,
     ffmpeg: config.ffmpeg,
@@ -47,9 +48,10 @@ export async function createContext(db: Db = openDb(config.dataDir)): Promise<Ap
     media,
     live,
     liveServices: {
-      ndiSources: async () => {
+      ndiSources: async ({ groups = [] } = {}) => {
         if (!(await ndiAvailable(config.ffmpegNdi))) throw new Error('Der Server hat keinen NDI-Eingang (siehe README, „NDI als Live-Quelle“)');
-        return findNdiSources(config.ffmpegNdi, { extraIps: config.ndiExtraIps });
+        const configDir = groups.length ? ndiConfigDir(join(config.dataDir, 'ndi'), groups) : undefined;
+        return findNdiSources(config.ffmpegNdi, { extraIps: config.ndiExtraIps, configDir });
       },
     },
     playerBuild: playerBuildReader(config.playerDist),

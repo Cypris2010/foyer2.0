@@ -2,7 +2,7 @@
 //   user:create <email> <name> <role>   password from FOYER_PASSWORD or prompt
 //   demo:seed                           demo channel, slides and display; prints the player URL
 //   test:seed [--reset]                 test accounts + demo content + two displays (local testing only)
-//   ndi:sources [ip,ip…]                NDI sources this server sees (needs the NDI ffmpeg)
+//   ndi:sources [ip,…] [--groups g,…]   NDI sources this server sees (needs the NDI ffmpeg)
 import { createInterface } from 'node:readline/promises';
 import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -11,7 +11,7 @@ import { config } from './config.ts';
 import { encrypt, hashPassword, randomToken, sha256 } from './crypto.ts';
 import { loadTokenKey } from './keys.ts';
 import { TEST_ACCOUNTS } from './test-accounts.ts';
-import { findNdiSources, ndiAvailable } from './ndi.ts';
+import { findNdiSources, ndiAvailable, useNdiGroups } from './ndi.ts';
 
 const [command, ...args] = process.argv.slice(2);
 
@@ -121,9 +121,15 @@ async function listNdi() {
   if (!(await ndiAvailable(config.ffmpegNdi))) {
     throw new Error('Kein ffmpeg mit NDI gefunden. Bauen mit deploy/ffmpeg-ndi/build.sh, Pfad über FOYER_FFMPEG_NDI.');
   }
-  const extraIps = args[0] ? args[0].split(',').map((ip) => ip.trim()).filter(Boolean) : [];
+  const split = (value: string) => value.split(',').map((v) => v.trim()).filter(Boolean);
+  const groupsAt = args.indexOf('--groups');
+  const groups = groupsAt >= 0 ? split(args[groupsAt + 1] ?? '') : config.ndiGroups;
+  const ips = args.find((arg, i) => !arg.startsWith('--') && i !== groupsAt + 1);
+  const extraIps = ips ? split(ips) : config.ndiExtraIps;
+  useNdiGroups(join(config.dataDir, 'ndi'), groups);
   const sources = await findNdiSources(config.ffmpegNdi, { extraIps });
-  if (!sources.length) console.log('Keine NDI-Quellen gefunden (gleiches Netz? Quellen in anderen Subnetzen als IP angeben).');
+  if (groups.length) console.log(`Gruppen: ${groups.join(', ')}`);
+  if (!sources.length) console.log('Keine NDI-Quellen gefunden (gleiches Netz? Quellen in anderen Subnetzen als IP angeben, andere Gruppen mit --groups).');
   for (const source of sources) console.log(`  ${source.name}  (${source.address})`);
 }
 
@@ -132,7 +138,7 @@ try {
   else if (command === 'demo:seed') seedDemo();
   else if (command === 'test:seed') await seedTest();
   else if (command === 'ndi:sources') await listNdi();
-  else console.log('Befehle: user:create <email> <name> <role> | demo:seed | test:seed [--reset] | ndi:sources [ip,…]');
+  else console.log('Befehle: user:create <email> <name> <role> | demo:seed | test:seed [--reset] | ndi:sources [ip,…] [--groups g,…]');
 } catch (err) {
   console.error((err as Error).message);
   process.exitCode = 1;

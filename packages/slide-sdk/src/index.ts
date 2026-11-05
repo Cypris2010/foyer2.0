@@ -56,14 +56,16 @@ export interface LiveInput {
   /** `ndi`: an NDI source name; `url`: anything ffmpeg reads (rtsp, rtmp, srt, hls, udp …). */
   kind: 'ndi' | 'url';
   value: string;
+  /** `ndi`: groups to search for the source instead of the server's default. */
+  groups?: string[];
   /** Output profile; 720p30 is what Airtame 2 decodes cleanly over WebRTC. */
   profile: '720p30' | '1080p30';
   audio: boolean;
 }
 
 export interface LiveServices {
-  /** NDI sources the server sees; throws when the server has no NDI input. */
-  ndiSources(): Promise<Array<{ name: string; address: string }>>;
+  /** NDI sources the server sees (in `groups`, else its default groups); throws when the server has no NDI input. */
+  ndiSources(options?: { groups?: string[] }): Promise<Array<{ name: string; address: string }>>;
 }
 
 export interface Option {

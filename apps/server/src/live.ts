@@ -9,6 +9,7 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { LiveInput } from '@foyer/slide-sdk';
 import { sha256 } from './crypto.ts';
+import { ndiConfigDir } from './ndi.ts';
 
 export interface LiveOptions {
   /** MediaMTX binary; empty or missing = no live video. */
@@ -36,7 +37,8 @@ export const PROFILES = {
 
 /** Same source + profile = same path, so several slides share one conversion. */
 export function livePathName(input: LiveInput): string {
-  return `live_${sha256(JSON.stringify([input.kind, input.value, input.profile, input.audio])).slice(0, 20)}`;
+  const key = [input.kind, input.value, input.profile, input.audio, ...(input.groups?.length ? [input.groups] : [])];
+  return `live_${sha256(JSON.stringify(key)).slice(0, 20)}`;
 }
 
 /**
@@ -178,7 +180,9 @@ export class LiveGateway {
   private async addPath(name: string, input: LiveInput) {
     const sourceFile = join(this.options.dir, `${name}.json`);
     const ffmpeg = input.kind === 'ndi' ? this.options.ffmpegNdi : this.options.ffmpeg;
-    writeFileSync(sourceFile, JSON.stringify({ ffmpeg, args: ingestArgs(input, `rtsp://127.0.0.1:${this.options.rtspPort}/${name}`, this.options.ndiExtraIps) }));
+    // A slide's own NDI groups go to its ffmpeg only; the rest use the server's default.
+    const env = input.kind === 'ndi' && input.groups?.length ? { NDI_CONFIG_DIR: ndiConfigDir(join(this.options.dir, 'ndi'), input.groups) } : undefined;
+    writeFileSync(sourceFile, JSON.stringify({ ffmpeg, args: ingestArgs(input, `rtsp://127.0.0.1:${this.options.rtspPort}/${name}`, this.options.ndiExtraIps), env }));
     const conf = {
       runOnDemand: [process.execPath, join(import.meta.dirname, 'live-ingest.ts'), sourceFile].map(quote).join(' '),
       runOnDemandRestart: true,

@@ -83,6 +83,8 @@ export function SchemaForm({ schema, value, onChange, disabled, user, onError = 
               <SuggestField
                 typeId={typeId}
                 list={prop.options}
+                config={value}
+                field={name}
                 id={id}
                 value={String(current)}
                 maxLength={prop.maxLength}
@@ -167,6 +169,8 @@ export function SchemaForm({ schema, value, onChange, disabled, user, onError = 
 interface SuggestFieldProps {
   typeId: string;
   list: string;
+  config: Record<string, unknown>;
+  field: string;
   id: string;
   value: string;
   maxLength?: number;
@@ -176,16 +180,18 @@ interface SuggestFieldProps {
 
 /**
  * Free text with suggestions from a server option list (e.g. the NDI sources the
- * server sees). Searching can take a few seconds, so it runs on request.
+ * server sees, in the groups entered above). Searching can take a few seconds, so
+ * it runs on request.
  */
-function SuggestField({ typeId, list, id, value, maxLength, disabled, onChange }: SuggestFieldProps) {
+function SuggestField({ typeId, list, config, field, id, value, maxLength, disabled, onChange }: SuggestFieldProps) {
   const [options, setOptions] = useState<Option[] | null>(null);
   const [state, setState] = useState<'idle' | 'loading' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
   const search = () => {
+    const { [field]: _own, ...rest } = config;
     setState('loading');
     api
-      .get<Option[]>(`/slide-types/${encodeURIComponent(typeId)}/options/${encodeURIComponent(list)}`)
+      .get<Option[]>(`/slide-types/${encodeURIComponent(typeId)}/options/${encodeURIComponent(list)}?config=${encodeURIComponent(JSON.stringify(rest))}`)
       .then((result) => {
         setOptions(result);
         setState('idle');
