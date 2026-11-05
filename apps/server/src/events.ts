@@ -14,7 +14,9 @@ export class EventHub {
     set.add(listener);
     return () => {
       set.delete(listener);
-      if (!set.size) this.listeners.delete(displayId);
+      // Only our own set: callers may unsubscribe twice (abort, then end of the
+      // stream loop), after a reconnect has already put a new set in place.
+      if (!set.size && this.listeners.get(displayId) === set) this.listeners.delete(displayId);
     };
   }
 
