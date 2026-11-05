@@ -1,11 +1,15 @@
 import './styles.css';
-import { clearCachedManifest, endpointsFromPath, fetchManifest, HttpError, loadCachedManifest, postJson, storeManifest } from './api.ts';
+import { clearCachedManifest, endpointsFromPath, fetchManifest, fetchServerTime, HttpError, loadCachedManifest, postJson, storeManifest } from './api.ts';
 import { Ticker } from './ticker.ts';
+import { ServerClock } from './clock.ts';
 import { withSlideData, withoutSlideData } from './data.ts';
 import { createUpdateCheck } from './update.ts';
 import type { Manifest } from './types.ts';
 
 const HEARTBEAT_MS = 30_000;
+// Server clock: a few quick samples at start (best one wins), then one per heartbeat.
+const CLOCK_START_SAMPLES = 5;
+const CLOCK_START_GAP_MS = 300;
 const POLL_WITH_SSE_MS = 5 * 60_000;
 const POLL_WITHOUT_SSE_MS = 60_000;
 // While another device holds the display, check again this often.
@@ -49,6 +53,12 @@ if (!endpoints) {
   };
 
   const update = createUpdateCheck(recordError);
+  // Displays run on the server's clock, so all of them switch slides together.
+  // Previews start their own timeline at page load (from the first slide).
+  const clock = endpoints.mode === 'display' ? new ServerClock() : null;
+  const pageStart = Date.now();
+  const now =
+    endpoints.mode === 'display' ? () => clock!.now() : endpoints.mode === 'preview' ? () => Date.now() - pageStart : Date.now;
   const ticker = new Ticker(stage, progress, {
     onError: recordError,
     onSlideChange: () => {
@@ -56,10 +66,22 @@ if (!endpoints) {
       if (update.due) return location.reload();
       reportNowPlaying();
     },
-  });
+  }, now);
+  if (clock) clock.onShift = () => ticker.resync();
 
   const cached = loadCachedManifest(endpoints.cacheKey);
   if (cached) ticker.setManifest(withoutSlideData(cached));
+
+  // Only while holding the display: every player request also claims it.
+  const syncClock = async () => {
+    if (clock && endpoints.time && active) await clock.sync(endpoints.time, fetchServerTime);
+  };
+  const syncClockQuickly = async () => {
+    for (let i = 0; i < CLOCK_START_SAMPLES; i++) {
+      await syncClock();
+      await new Promise((resolve) => setTimeout(resolve, CLOCK_START_GAP_MS));
+    }
+  };
 
   const block = (message: string) => {
     active = false;
@@ -102,7 +124,10 @@ if (!endpoints) {
       if (update.due && !ticker.currentSlideId) return location.reload();
       ticker.setManifest(manifest);
       if (endpoints.mode === 'live') followDisplay(manifest);
-      if (!wasActive) openEvents();
+      if (!wasActive) {
+        openEvents();
+        void syncClockQuickly();
+      }
       clearTimeout(nextChangeTimer);
       if (manifest.nextChange) {
         const delay = Math.max(1000, Date.parse(manifest.nextChange) - Date.now() + 1000);
@@ -172,6 +197,7 @@ if (!endpoints) {
     };
     setTimeout(heartbeat, 3000);
     setInterval(heartbeat, HEARTBEAT_MS);
+    setInterval(syncClock, HEARTBEAT_MS);
     setTimeout(() => location.reload(), FULL_RELOAD_MS);
   }
 }

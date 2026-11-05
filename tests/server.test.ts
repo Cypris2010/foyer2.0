@@ -87,6 +87,14 @@ describe('Player-Zugang', () => {
     expect(JSON.parse(row.status_json).slideId).toBe('s-text');
   });
 
+  it('liefert die Serverzeit für die gemeinsame Uhr', async () => {
+    const { app, token, now } = await setup();
+    const res = await app.request(`/api/player/${token}/time`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ now });
+    expect((await app.request('/api/player/falsch/time')).status).toBe(403);
+  });
+
   it('schreibt keine Tokens ins Log', () => {
     expect(maskPath('/p/abc123')).toBe('/p/***');
     expect(maskPath('/api/player/abc123/manifest')).toBe('/api/player/***/manifest');

@@ -6,6 +6,8 @@ export interface Endpoints {
   manifest: string;
   events: string | null;
   heartbeat: string | null;
+  /** Server time for the shared slide clock (display mode). */
+  time: string | null;
   /** Where a display reports slide changes (display mode). */
   nowPlaying: string | null;
   cacheKey: string | null;
@@ -21,7 +23,7 @@ export function endpointsFromPath(pathname: string): Endpoints | null {
   const live = pathname.match(/^\/p\/preview-display\/([^/]+)/);
   if (live) {
     const base = `/api/preview/displays/${live[1]}`;
-    return { mode: 'live', manifest: `${base}/manifest`, events: `${base}/events`, heartbeat: null, nowPlaying: null, cacheKey: null, pollMs: 30_000 };
+    return { mode: 'live', manifest: `${base}/manifest`, events: `${base}/events`, heartbeat: null, time: null, nowPlaying: null, cacheKey: null, pollMs: 30_000 };
   }
   const preview = pathname.match(/^\/p\/preview\/([^/]+)/);
   if (preview) {
@@ -30,6 +32,7 @@ export function endpointsFromPath(pathname: string): Endpoints | null {
       manifest: `/api/preview/slides/${preview[1]}/manifest`,
       events: null,
       heartbeat: null,
+      time: null,
       nowPlaying: null,
       cacheKey: null,
       pollMs: null,
@@ -43,6 +46,7 @@ export function endpointsFromPath(pathname: string): Endpoints | null {
     manifest: `${base}/manifest`,
     events: `${base}/events?session=${sessionId}`,
     heartbeat: `${base}/heartbeat`,
+    time: `${base}/time`,
     nowPlaying: `${base}/now-playing`,
     cacheKey: 'foyer.manifest',
     pollMs: null,
@@ -99,6 +103,14 @@ export function clearCachedManifest(key: string | null) {
   } catch {
     // ignore
   }
+}
+
+export async function fetchServerTime(url: string): Promise<number> {
+  const res = await fetch(url, { cache: 'no-store', credentials: 'same-origin', headers: { 'X-Foyer-Session': sessionId } });
+  if (!res.ok) throw new HttpError(res.status, `Zeit: HTTP ${res.status}`);
+  const { now } = await res.json();
+  if (typeof now !== 'number') throw new Error('Zeit: ungültige Antwort');
+  return now;
 }
 
 export function postJson(url: string, body: unknown) {

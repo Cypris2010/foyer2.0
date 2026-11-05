@@ -602,6 +602,9 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
 
   player.get('/:token/manifest', async (c) => c.json(await buildManifest(ctx, c.get('display'))));
 
+  // Clock for synchronous displays (player clock.ts): tiny, no database write.
+  player.get('/:token/time', (c) => c.json({ now: ctx.now() }));
+
   player.post('/:token/heartbeat', async (c) => {
     const body = heartbeatBody.safeParse(await c.req.json().catch(() => null));
     if (!body.success) return badRequest(c, body.error);
