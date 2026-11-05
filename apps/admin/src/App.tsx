@@ -6,6 +6,7 @@ import { Slides } from './Slides.tsx';
 import { CalendarPage } from './CalendarPage.tsx';
 import { MediaPage } from './Media.tsx';
 import { SettingsPage } from './Settings.tsx';
+import iconUrl from '../../../assets/icon.svg';
 
 const pages = { displays: 'Displays', calendar: 'Kalender', channels: 'Channels', slides: 'Folien', media: 'Medien', settings: 'Einstellungen' } as const;
 // Pages only admins see.
@@ -32,7 +33,10 @@ function Login({ onLogin }: { onLogin: (user: User) => void }) {
   };
   return (
     <form className="login" onSubmit={submit}>
-      <h1>Foyer</h1>
+      <div className="login__brand">
+        <img src={iconUrl} alt="" width={72} height={72} />
+        <h1>Foyer 2.0</h1>
+      </div>
       <label className="field">
         <span>E-Mail</span>
         <input type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required />
@@ -75,7 +79,7 @@ export function App() {
   return (
     <div className="app">
       <nav className="nav">
-        <strong>Foyer</strong>
+        <strong>Foyer 2.0</strong>
         {(Object.keys(pages) as Page[]).filter((p) => !adminPages.has(p) || can(user, 'admin')).map((p) => (
           <a key={p} href={`#${p}`} className={page === p ? 'active' : ''}>{pages[p]}</a>
         ))}
