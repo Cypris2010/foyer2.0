@@ -8,6 +8,7 @@ import { loadTokenKey } from './keys.ts';
 import { join } from 'node:path';
 import { MediaLibrary } from './media.ts';
 import { playerBuildReader } from './player-build.ts';
+import { LiveGateway } from './live.ts';
 
 export function contentSecret(db: Db): string {
   let secret = getSetting(db, 'content_secret');
@@ -26,11 +27,14 @@ export async function createContext(db: Db = openDb(config.dataDir)): Promise<Ap
     maxBytes: config.mediaMaxMb * 1048576,
   });
   media.resume();
+  const live = config.liveGateway ? new LiveGateway(config.liveGateway, config.liveGatewayKey) : undefined;
   return {
     db,
     registry: await loadRegistry(config.slideTypesDir),
     events: new EventHub(),
     media,
+    live,
+    liveServices: live && { ndiSources: ({ groups = [] } = {}) => live.ndiSources(groups) },
     playerBuild: playerBuildReader(config.playerDist),
     secret: contentSecret(db),
     tokenKey: loadTokenKey(config.dataDir),

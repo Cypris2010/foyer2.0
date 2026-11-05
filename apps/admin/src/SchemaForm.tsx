@@ -40,6 +40,7 @@ export function SchemaForm({ schema, value, onChange, disabled, user, onError = 
   return (
     <div className="form">
       {Object.entries(schema.properties ?? {}).map(([name, prop]) => {
+        if (prop.visibleIf && !Object.entries(prop.visibleIf).every(([field, v]) => (value[field] ?? schema.properties[field]?.default) === v)) return null;
         const label = prop.description ?? name;
         const current = value[name] ?? prop.default ?? '';
         const id = `field-${name}`;
@@ -69,6 +70,24 @@ export function SchemaForm({ schema, value, onChange, disabled, user, onError = 
                 config={value}
                 field={name}
                 value={Array.isArray(current) ? (current as string[]) : []}
+                disabled={disabled}
+                onChange={(v) => set(name, v)}
+              />
+            </div>
+          );
+        }
+        if (prop.widget === 'suggest' && prop.options && typeId) {
+          return (
+            <div key={name} className="field">
+              <span>{label}</span>
+              <SuggestField
+                typeId={typeId}
+                list={prop.options}
+                config={value}
+                field={name}
+                id={id}
+                value={String(current)}
+                maxLength={prop.maxLength}
                 disabled={disabled}
                 onChange={(v) => set(name, v)}
               />
@@ -143,6 +162,65 @@ export function SchemaForm({ schema, value, onChange, disabled, user, onError = 
             );
         }
       })}
+    </div>
+  );
+}
+
+interface SuggestFieldProps {
+  typeId: string;
+  list: string;
+  config: Record<string, unknown>;
+  field: string;
+  id: string;
+  value: string;
+  maxLength?: number;
+  disabled?: boolean;
+  onChange: (value: string) => void;
+}
+
+/**
+ * Free text with suggestions from a server option list (e.g. the NDI sources the
+ * server sees, in the groups entered above). Searching can take a few seconds, so
+ * it runs on request.
+ */
+function SuggestField({ typeId, list, config, field, id, value, maxLength, disabled, onChange }: SuggestFieldProps) {
+  const [options, setOptions] = useState<Option[] | null>(null);
+  const [state, setState] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [error, setError] = useState<string | null>(null);
+  const search = () => {
+    const { [field]: _own, ...rest } = config;
+    setState('loading');
+    api
+      .get<Option[]>(`/slide-types/${encodeURIComponent(typeId)}/options/${encodeURIComponent(list)}?config=${encodeURIComponent(JSON.stringify(rest))}`)
+      .then((result) => {
+        setOptions(result);
+        setState('idle');
+      })
+      .catch((e) => {
+        setError((e as Error).message);
+        setState('error');
+      });
+  };
+  return (
+    <div className="suggest-field">
+      <div className="suggest-field__bar">
+        <input id={id} type="text" value={value} maxLength={maxLength} disabled={disabled} onChange={(e) => onChange(e.target.value)} />
+        <button type="button" disabled={disabled || state === 'loading'} onClick={search}>
+          {state === 'loading' ? 'Suche …' : 'Quellen suchen'}
+        </button>
+      </div>
+      {state === 'error' && <p className="error">Suche fehlgeschlagen: {error}</p>}
+      {options && !options.length && <p className="muted">Keine Quellen gefunden.</p>}
+      {options && options.length > 0 && (
+        <div className="options-field__list">
+          {options.map((o) => (
+            <label key={o.value} className="field--check">
+              <input type="radio" name={`${id}-choice`} checked={value === o.value} disabled={disabled} onChange={() => onChange(o.value)} />
+              {o.label}
+            </label>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

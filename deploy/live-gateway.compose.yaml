@@ -1,0 +1,27 @@
+# Live gateway on its own machine, e.g. in the AV network next to the NDI sources:
+#
+#   docker compose -f deploy/live-gateway.compose.yaml up -d --build
+#
+# Needs FOYER_LIVE_GATEWAY_KEY in deploy/.env (the same key as on the Foyer server).
+# On the Foyer server: FOYER_LIVE_GATEWAY=http://<this machine>:8190 and no live-gateway service.
+# Firewall: 8190 TCP only from the Foyer server; 8189 UDP/TCP from the displays.
+services:
+  live-gateway:
+    build:
+      context: ..
+      dockerfile: apps/live-gateway/Dockerfile
+      args:
+        # NDI live input: set both to build the separate ffmpeg with NDI (nonfree, never publish the image).
+        FOYER_NDI: "0"
+        NDI_LICENSE: ""
+    image: foyer-live-gateway:local
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      FOYER_GATEWAY_HOST: 0.0.0.0
+      FOYER_LIVE_GATEWAY_KEY: ${FOYER_LIVE_GATEWAY_KEY:?FOYER_LIVE_GATEWAY_KEY in deploy/.env setzen}
+      # FOYER_LIVE_HOSTS: 10.48.20.2                 # address the displays reach, if not found automatically
+      # FOYER_NDI_EXTRA_IPS: 10.48.20.5,10.48.20.9   # NDI senders in other subnets
+      # FOYER_NDI_GROUPS: public,lgstv               # NDI groups to search (default: public only)
+    volumes:
+      - /run/dbus:/run/dbus

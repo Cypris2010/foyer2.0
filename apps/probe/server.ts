@@ -80,15 +80,21 @@ async function reportsPage(res: ServerResponse, keyQuery: string) {
     const anims = (r.animation ?? [])
       .map((a: any) => `${escapeHtml(a.id)}: ${escapeHtml(a.fps)} fps, p95 ${escapeHtml(a.p95)} ms`)
       .join('<br>');
+    const s = r.streaming ?? {};
+    const live = s.tests
+      ? [`MSE ${s.mediaSource ? 'ja' : 'nein'} · WebRTC ${s.webrtc ? 'ja' : 'nein'} · Quelle ${escapeHtml(s.liveSource)}`,
+        ...s.tests.map((t: any) => `${escapeHtml(t.id)}: ${t.error ? 'Fehler ' + escapeHtml(t.error) : escapeHtml(t.droppedPercent) + ' % verworfen'
+          + (t.freezeCount ? `, ${escapeHtml(t.freezeCount)}× eingefroren` : '')}`)].join('<br>')
+      : '–';
     return `<tr><td>${escapeHtml(r.receivedAt)}<br><a href="/api/reports/${escapeHtml(r.file)}${keyQuery}">JSON</a></td>
       <td>${escapeHtml(r.device)}<br>Lauf #${escapeHtml(r.storage?.loadCount)}</td>
       <td>${escapeHtml(r.browser?.chromium ?? r.browser?.userAgent)}</td>
-      <td>${anims}</td><td>${videos}</td></tr>`;
+      <td>${anims}</td><td>${videos}</td><td>${live}</td></tr>`;
   });
   send(res, 200, `<!doctype html><meta charset="utf-8"><title>Probe-Berichte</title>
     <style>body{font:14px system-ui;margin:24px}td,th{border:1px solid #ccc;padding:6px;vertical-align:top;text-align:left}table{border-collapse:collapse}</style>
     <h1>Probe-Berichte (${reports.length})</h1>
-    <table><tr><th>Empfangen</th><th>Gerät</th><th>Browser</th><th>Animation</th><th>Video</th></tr>${rows.join('')}</table>`,
+    <table><tr><th>Empfangen</th><th>Gerät</th><th>Browser</th><th>Animation</th><th>Video</th><th>Live</th></tr>${rows.join('')}</table>`,
     mimeTypes['.html']);
 }
 

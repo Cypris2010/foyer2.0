@@ -8,7 +8,7 @@
   var params = parseQuery(location.search);
   var deviceName = params.device || 'unbekannt';
   var report = {
-    probeVersion: 1,
+    probeVersion: 2,
     device: deviceName,
     startedAt: new Date().toISOString(),
     browser: {},
@@ -21,6 +21,7 @@
     codecs: {},
     animation: [],
     video: [],
+    streaming: {},
     autoplay: {},
     errors: []
   };
@@ -605,6 +606,358 @@
     setTimeout(function () { finish(null, 'timeout'); }, 8000);
   }
 
+  // --- Step: live video (MediaSource, WebRTC) --------------------------------
+  // Decides how Foyer brings live sources to the displays: WebRTC (WHEP, < 1 s delay)
+  // or HLS through MediaSource (a few seconds). The live tests need the MediaMTX test
+  // source from apps/probe/live on the probe host (or ?whep= / ?hls= base URLs).
+
+  var liveHost = location.protocol + '//' + location.hostname;
+  var whepBase = params.whep || liveHost + ':8889';
+  var hlsBase = params.hls || liveHost + ':8888';
+
+  function collectLiveFeatures(next) {
+    var s = report.streaming;
+    var MS = window.MediaSource || window.WebKitMediaSource;
+    s.mediaSource = !!MS;
+    s.managedMediaSource = 'ManagedMediaSource' in window;
+    s.mseTypes = {};
+    var types = {
+      'h264-baseline': 'video/mp4; codecs="avc1.42c028"',
+      'h264-high': 'video/mp4; codecs="avc1.640028"',
+      'opus': 'audio/mp4; codecs="opus"',
+      'aac': 'audio/mp4; codecs="mp4a.40.2"'
+    };
+    for (var key in types) s.mseTypes[key] = MS && MS.isTypeSupported ? MS.isTypeSupported(types[key]) : false;
+    s.nativeHls = document.createElement('video').canPlayType('application/vnd.apple.mpegurl') || 'no';
+    s.webrtc = 'RTCPeerConnection' in window;
+    s.webrtcVideoCodecs = [];
+    if (window.RTCRtpReceiver && RTCRtpReceiver.getCapabilities) {
+      var caps = RTCRtpReceiver.getCapabilities('video');
+      (caps && caps.codecs || []).forEach(function (c) {
+        if (/rtx|red|ulpfec|flexfec/i.test(c.mimeType)) return;
+        var profile = (c.sdpFmtpLine || '').match(/profile-level-id=(\w+)/);
+        var name = c.mimeType.replace('video/', '') + (profile ? ' ' + profile[1] : '');
+        if (s.webrtcVideoCodecs.indexOf(name) < 0) s.webrtcVideoCodecs.push(name);
+      });
+    }
+    s.webCodecs = 'VideoDecoder' in window;
+
+    function show() {
+      var h264 = s.webrtcVideoCodecs.filter(function (c) { return /^H264/.test(c); });
+      addGroup('Live-Fähigkeiten', [
+        row('MediaSource (MSE)', s.mediaSource),
+        ['MSE H.264 Baseline / High', yesNo(s.mseTypes['h264-baseline'])[0] + ' / ' + yesNo(s.mseTypes['h264-high'])[0], s.mseTypes['h264-baseline'] ? 'ok' : 'bad'],
+        ['HLS nativ', s.nativeHls === 'no' ? 'nein (braucht MSE)' : s.nativeHls, s.nativeHls === 'no' ? 'warn' : 'ok'],
+        row('WebRTC', s.webrtc),
+        ['WebRTC H.264', h264.length ? h264.join(', ') : 'nein', h264.length ? 'ok' : 'bad'],
+        ['WebCodecs H.264 Hardware', s.webCodecsHardware === undefined ? '–' : (s.webCodecsHardware ? 'ja' : 'nein'), s.webCodecsHardware ? 'ok' : 'warn']
+      ]);
+      next();
+    }
+    if (!s.webCodecs || !VideoDecoder.isConfigSupported) return show();
+    VideoDecoder.isConfigSupported({ codec: 'avc1.42c028', codedWidth: 1920, codedHeight: 1080, hardwareAcceleration: 'prefer-hardware' })
+      .then(function (r) { s.webCodecsHardware = !!r.supported; }, function () { s.webCodecsHardware = false; })
+      .then(show);
+  }
+
+  function request(url, type, timeoutMs, done) {
+    var xhr = new XMLHttpRequest();
+    var finished = false;
+    function finish(err, value) { if (!finished) { finished = true; done(err, value, xhr); } }
+    xhr.open('GET', url);
+    if (type) xhr.responseType = type;
+    xhr.timeout = timeoutMs;
+    xhr.onload = function () {
+      if (xhr.status >= 200 && xhr.status < 300) finish(null, type ? xhr.response : xhr.responseText);
+      else finish('HTTP ' + xhr.status);
+    };
+    xhr.onerror = function () { finish('Netzwerk'); };
+    xhr.ontimeout = function () { finish('timeout'); };
+    xhr.send();
+  }
+
+  function resolveUrl(relative, base) {
+    return new URL(relative, base).href;
+  }
+
+  // Shared playback measurement for the MSE and live tests: plays `seconds` after 'playing'.
+  function measurePlayback(id, label, seconds, start, next) {
+    setStatus('Live: ' + label);
+    stage.innerHTML = '';
+    stage.className = 'active';
+    var video = document.createElement('video');
+    video.muted = true;
+    video.setAttribute('muted', '');
+    video.setAttribute('playsinline', '');
+    video.autoplay = true;
+    var caption = document.createElement('div');
+    caption.className = 'label';
+    caption.textContent = label;
+    stage.appendChild(video);
+    stage.appendChild(caption);
+
+    var result = { id: id, label: label, waiting: 0 };
+    var t0 = Date.now();
+    var finished = false;
+    var stop = null;
+    var playTimer = null;
+
+    function finish(error) {
+      if (finished) return;
+      finished = true;
+      clearTimeout(playTimer);
+      clearTimeout(watchdog);
+      if (error) result.error = error;
+      var quality = video.getVideoPlaybackQuality ? video.getVideoPlaybackQuality() : null;
+      if (quality) {
+        result.totalFrames = quality.totalVideoFrames;
+        result.droppedFrames = quality.droppedVideoFrames;
+        result.droppedPercent = quality.totalVideoFrames ? round(quality.droppedVideoFrames / quality.totalVideoFrames * 100, 1) : null;
+      }
+      result.videoWidth = video.videoWidth;
+      result.videoHeight = video.videoHeight;
+      var after = function () {
+        report.streaming.tests.push(result);
+        video.pause();
+        video.srcObject = null;
+        video.removeAttribute('src');
+        try { video.load(); } catch (e) {}
+        stage.className = '';
+        stage.innerHTML = '';
+        setTimeout(next, 500);
+      };
+      if (stop) stop(result, after); else after();
+    }
+
+    var watchdog = setTimeout(function () { finish(result.playingMs === undefined ? 'kein Bild nach 20 s' : 'timeout'); }, (seconds + 20) * 1000);
+    video.addEventListener('playing', function () {
+      if (result.playingMs !== undefined) return;
+      result.playingMs = Date.now() - t0;
+      playTimer = setTimeout(function () { finish(); }, seconds * 1000);
+    });
+    video.addEventListener('waiting', function () {
+      if (result.playingMs !== undefined) result.waiting++;
+    });
+    video.addEventListener('error', function () {
+      finish('MediaError ' + (video.error ? video.error.code : '?'));
+    });
+    stop = start(video, result, finish);
+    var promise = video.play();
+    if (promise && promise.catch) promise.catch(function () {});
+  }
+
+  // Returns append(buffer): queues buffers for a SourceBuffer and appends them one after another.
+  function appendQueue(sourceBuffer, onError) {
+    var queue = [];
+    function pump() {
+      if (sourceBuffer.updating || !queue.length) return;
+      try {
+        sourceBuffer.appendBuffer(queue.shift());
+      } catch (e) {
+        onError('appendBuffer: ' + (e && e.name || e));
+      }
+    }
+    sourceBuffer.addEventListener('updateend', pump);
+    return function (buffer) { queue.push(buffer); pump(); };
+  }
+
+  // A recorded clip fed through MediaSource in 512 KB pieces: MSE decoding without the network.
+  function mseClip(video, result, fail) {
+    var ms = new MediaSource();
+    video.src = URL.createObjectURL(ms);
+    ms.addEventListener('sourceopen', function () {
+      var sb;
+      try { sb = ms.addSourceBuffer('video/mp4; codecs="avc1.640028"'); } catch (e) { return fail('addSourceBuffer: ' + e.name); }
+      var append = appendQueue(sb, fail);
+      request('/clips/mse-1080p30-5M-high.mp4', 'arraybuffer', 20000, function (err, data) {
+        if (err) return fail('Clip: ' + err);
+        for (var offset = 0; offset < data.byteLength; offset += 524288) append(data.slice(offset, offset + 524288));
+      });
+    });
+    return null;
+  }
+
+  // WebRTC via WHEP: one recvonly offer, ICE gathered up front (no trickle), answer from MediaMTX.
+  function webrtcLive(path) {
+    return function (video, result, fail) {
+      var pc = new RTCPeerConnection();
+      pc.addTransceiver('video', { direction: 'recvonly' });
+      pc.ontrack = function (event) {
+        video.srcObject = event.streams && event.streams[0] ? event.streams[0] : new MediaStream([event.track]);
+      };
+      pc.oniceconnectionstatechange = function () {
+        result.iceState = pc.iceConnectionState;
+        if (pc.iceConnectionState === 'failed') fail('ICE fehlgeschlagen (UDP/TCP 8189 gesperrt?)');
+      };
+      function post(sdp) {
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', whepBase + '/' + path + '/whep');
+        xhr.setRequestHeader('Content-Type', 'application/sdp');
+        xhr.timeout = 10000;
+        xhr.onload = function () {
+          if (xhr.status !== 201) return fail('WHEP HTTP ' + xhr.status);
+          pc.setRemoteDescription({ type: 'answer', sdp: xhr.responseText }).catch(function (e) { fail('SDP: ' + e); });
+        };
+        xhr.onerror = function () { fail('WHEP nicht erreichbar'); };
+        xhr.ontimeout = function () { fail('WHEP timeout'); };
+        xhr.send(sdp);
+      }
+      pc.createOffer().then(function (offer) {
+        return pc.setLocalDescription(offer);
+      }).then(function () {
+        var sent = false;
+        function send() { if (!sent) { sent = true; post(pc.localDescription.sdp); } }
+        pc.onicegatheringstatechange = function () { if (pc.iceGatheringState === 'complete') send(); };
+        if (pc.iceGatheringState === 'complete') send();
+        setTimeout(send, 2000);
+      }).catch(function (e) { fail('Offer: ' + e); });
+
+      return function (result, after) {
+        pc.getStats().then(function (stats) {
+          var pairs = {};
+          var candidates = {};
+          stats.forEach(function (s) {
+            if (s.type === 'inbound-rtp' && s.kind === 'video') {
+              result.framesDecoded = s.framesDecoded;
+              result.framesDropped = s.framesDropped;
+              result.framesPerSecond = s.framesPerSecond;
+              result.packetsLost = s.packetsLost;
+              result.freezeCount = s.freezeCount;
+              result.freezeSeconds = s.totalFreezesDuration;
+              result.decoder = s.decoderImplementation;
+              result.powerEfficientDecoder = s.powerEfficientDecoder;
+              if (s.jitterBufferEmittedCount) result.jitterBufferMs = round(s.jitterBufferDelay / s.jitterBufferEmittedCount * 1000);
+            }
+            if (s.type === 'candidate-pair' && (s.nominated || s.selected) && s.state === 'succeeded') pairs.selected = s;
+            if (s.type === 'local-candidate') candidates[s.id] = s;
+          });
+          if (pairs.selected) {
+            result.rttMs = pairs.selected.currentRoundTripTime !== undefined ? round(pairs.selected.currentRoundTripTime * 1000) : undefined;
+            var local = candidates[pairs.selected.localCandidateId];
+            if (local) result.transport = local.protocol;
+          }
+        }).catch(function () {}).then(function () {
+          pc.close();
+          after();
+        });
+      };
+    };
+  }
+
+  // HLS through MediaSource with a minimal loader for MediaMTX's fMP4 playlists
+  // (the real player would use hls.js; this only checks what the device can decode).
+  function hlsLive(path) {
+    return function (video, result, fail) {
+      var stopped = false;
+      var timer = null;
+      var ms = new MediaSource();
+      video.src = URL.createObjectURL(ms);
+      ms.addEventListener('sourceopen', function () {
+        request(hlsBase + '/' + path + '/index.m3u8', null, 5000, function (err, master, xhr) {
+          if (err) return fail('Playlist: ' + err);
+          var lines = master.split('\n');
+          var codecs = (master.match(/CODECS="([^"]+)"/) || [])[1] || 'avc1.42c028';
+          var mediaUrl = xhr.responseURL || hlsBase + '/' + path + '/index.m3u8';
+          for (var i = 0; i < lines.length; i++) {
+            if (/^#EXT-X-STREAM-INF/.test(lines[i])) { mediaUrl = resolveUrl(lines[i + 1].trim(), mediaUrl); break; }
+          }
+          var sb;
+          try { sb = ms.addSourceBuffer('video/mp4; codecs="' + codecs + '"'); } catch (e) { return fail('addSourceBuffer: ' + e.name); }
+          var append = appendQueue(sb, fail);
+          var lastSequence = -1;
+          var seeked = false;
+          sb.addEventListener('updateend', function () {
+            // Live timestamps do not start at 0: jump to the start of what is buffered.
+            if (!seeked && sb.buffered.length) {
+              seeked = true;
+              video.currentTime = sb.buffered.start(0);
+            }
+          });
+          function poll(first) {
+            if (stopped) return;
+            request(mediaUrl, null, 5000, function (err, playlist, pxhr) {
+              if (stopped) return;
+              if (err) return fail('Medien-Playlist: ' + err);
+              var base = pxhr.responseURL || mediaUrl;
+              var mediaSequence = Number((playlist.match(/#EXT-X-MEDIA-SEQUENCE:(\d+)/) || [])[1] || 0);
+              var segments = playlist.split('\n').filter(function (l) { return l && l.charAt(0) !== '#'; });
+              var steps = [];
+              if (first) {
+                var map = playlist.match(/#EXT-X-MAP:URI="([^"]+)"/);
+                if (map) steps.push(resolveUrl(map[1], base));
+                // Start two segments behind the live edge.
+                lastSequence = mediaSequence + segments.length - 3;
+              }
+              segments.forEach(function (uri, index) {
+                if (mediaSequence + index > lastSequence) {
+                  steps.push(resolveUrl(uri.trim(), base));
+                  lastSequence = mediaSequence + index;
+                }
+              });
+              (function load() {
+                if (stopped) return;
+                var url = steps.shift();
+                if (!url) { timer = setTimeout(function () { poll(false); }, 1000); return; }
+                request(url, 'arraybuffer', 5000, function (err, data) {
+                  if (err) return fail('Segment: ' + err);
+                  append(data);
+                  load();
+                });
+              })();
+            });
+          }
+          poll(true);
+        });
+      });
+      return function (result, after) {
+        stopped = true;
+        clearTimeout(timer);
+        if (video.buffered.length) result.bufferAheadSeconds = round(video.buffered.end(video.buffered.length - 1) - video.currentTime, 1);
+        after();
+      };
+    };
+  }
+
+  function collectLive(next) {
+    var s = report.streaming;
+    s.tests = [];
+    var steps = [];
+    if (s.mediaSource) {
+      steps.push(function (done) { measurePlayback('mse-clip', 'MSE: 1080p30 Clip', 10, mseClip, done); });
+    }
+    steps.push(function (done) {
+      request(hlsBase + '/live1080/index.m3u8', null, 4000, function (err) {
+        s.liveSource = err ? 'nicht erreichbar (' + err + ')' : 'ok';
+        if (err) return done();
+        var live = [];
+        if (s.webrtc) {
+          live.push(function (d) { measurePlayback('webrtc-1080', 'WebRTC: 1080p30 live', 20, webrtcLive('live1080'), d); });
+          live.push(function (d) { measurePlayback('webrtc-720', 'WebRTC: 720p30 live', 15, webrtcLive('live720'), d); });
+        }
+        if (s.mediaSource) {
+          live.push(function (d) { measurePlayback('hls-1080', 'HLS (MSE): 1080p30 live', 20, hlsLive('live1080'), d); });
+        }
+        sequence(live, done);
+      });
+    });
+    sequence(steps, function () {
+      var rows = [['Live-Testquelle', s.liveSource, s.liveSource === 'ok' ? 'ok' : 'warn']];
+      s.tests.forEach(function (t) {
+        if (t.error) return rows.push([t.label, t.error, 'bad']);
+        var parts = [t.droppedPercent + ' % verworfen', 'Start ' + t.playingMs + ' ms', t.waiting + '× Puffer'];
+        if (t.jitterBufferMs !== undefined) parts.push('Puffer ' + t.jitterBufferMs + ' ms');
+        if (t.freezeCount) parts.push(t.freezeCount + '× eingefroren');
+        if (t.transport) parts.push(t.transport.toUpperCase());
+        if (t.decoder) parts.push(t.decoder);
+        if (t.bufferAheadSeconds !== undefined) parts.push(t.bufferAheadSeconds + ' s im Puffer');
+        var cls = t.droppedPercent < 1 && !t.freezeCount && t.waiting === 0 ? 'ok' : (t.droppedPercent < 5 ? 'warn' : 'bad');
+        rows.push([t.label, parts.join(' · '), cls]);
+      });
+      addGroup('Live-Video', rows);
+      next();
+    });
+  }
+
   // --- Step: send report ----------------------------------------------------
 
   function sendReport(next) {
@@ -632,20 +985,26 @@
     next();
   }
 
+  // ?only=live skips the animation and clip tests (about 2 minutes) for a quick live re-run.
+  var fullRun = params.only !== 'live';
   sequence([
     collectEnvironment,
     collectStorage,
     collectServiceWorker,
-    collectCodecs,
+    collectCodecs
+  ].concat(fullRun ? [
     animationScene('transform-12', '12 Boxen transform', boxes(12, false)),
     animationScene('transform-shadow-12', '12 Boxen + box-shadow', boxes(12, true)),
     animationScene('crossfade', 'Vollbild-Überblendung (opacity)', crossfade),
     animationScene('backdrop-blur', 'backdrop-filter blur(7px)', glass),
     summarizeAnimation,
-    collectVideo,
+    collectVideo
+  ] : []).concat([
+    collectLiveFeatures,
+    collectLive,
     collectAutoplay,
     sendReport
-  ], function () {
+  ]), function () {
     if (params.repeat) {
       // Optional soak test: ?repeat=30 reloads every 30 minutes.
       setTimeout(function () { location.reload(); }, Number(params.repeat) * 60000);

@@ -21,6 +21,13 @@ const testAccounts = (ctx.db.prepare('SELECT COUNT(*) AS n FROM users WHERE emai
 serve({ fetch: app.fetch, hostname: config.host, port: config.port }, (info) => {
   console.log(`Foyer läuft auf http://${info.address}:${info.port}  (Admin: /admin/)`);
   console.log(`Folientypen: ${[...ctx.registry.keys()].join(', ')}`);
+  if (!ctx.live) console.log('Live-Video nicht eingerichtet (kein Live-Gateway, FOYER_LIVE_GATEWAY)');
+  else {
+    ctx.live.status().then(
+      (status) => console.log(`Live-Gateway erreichbar (${config.liveGateway}), ${status.ndi ? 'mit' : 'ohne'} NDI-Eingang`),
+      (err: Error) => console.warn(`${err.message}. Live-Folien zeigen „Live-Bild nicht verfügbar“, bis es antwortet.`),
+    );
+  }
   if (!users) console.log('Noch kein Benutzer. Anlegen mit: npm run cli -w @foyer/server -- user:create <email> <name> admin');
   if (testAccounts) {
     console.warn(`WARNUNG: ${testAccounts} Testkonten (@${TEST_DOMAIN}) mit öffentlich bekannten Passwörtern sind aktiv. Nur für lokale Tests!`);

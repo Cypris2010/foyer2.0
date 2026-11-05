@@ -83,7 +83,6 @@ export function Slides({ user, onError }: { user: User; onError: (e: unknown) =>
   const [slides, setSlides] = useState<Slide[]>([]);
   const [types, setTypes] = useState<SlideType[]>([]);
   const [draft, setDraft] = useState<Draft | null>(null);
-  const [orientation, setOrientation] = useState<'landscape' | 'portrait'>('landscape');
 
   const load = () =>
     Promise.all([api.get<Slide[]>('/slides'), api.get<SlideType[]>('/slide-types')])
@@ -100,130 +99,201 @@ export function Slides({ user, onError }: { user: User; onError: (e: unknown) =>
   const startNew = (type: SlideType) =>
     setDraft({ id: null, title: `Neue ${type.name}-Folie`, type: type.id, config: defaultsFor(type.schema), background: null, duration: null, published: true });
 
+  return (
+    <section>
+      <h1>Folien</h1>
+      {can(user, 'editor') && (
+        <div className="types">
+          {types.filter((t) => mayEdit(t.id)).map((t) => (
+            <button key={t.id} title={t.description} onClick={() => startNew(t)}>+ {t.name}</button>
+          ))}
+        </div>
+      )}
+      {!slides.length && <p className="muted">Noch keine Folien.</p>}
+      <ul className="slide-cards">
+        {slides.map((slide) => (
+          <li key={slide.id}>
+            <button className={draft?.id === slide.id ? 'slide-card active' : 'slide-card'} onClick={() => setDraft({ ...slide })}>
+              <PlayerThumb src={`/p/preview/${slide.id}`} reloadKey={slide.updatedAt} />
+              <span className="slide-card__title">{slide.title}</span>
+              <span className="muted">
+                {typeOf(slide.type)?.name ?? slide.type}
+                {slide.published ? '' : ' · Entwurf'}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+      {draft && (
+        <SlideEditor
+          key={draft.id ?? 'new'}
+          initial={draft}
+          type={typeOf(draft.type)}
+          editable={mayEdit(draft.type)}
+          user={user}
+          onError={onError}
+          onSaved={(saved) => {
+            setDraft(saved);
+            void load();
+          }}
+          onDeleted={() => {
+            setDraft(null);
+            void load();
+          }}
+          onClose={() => setDraft(null)}
+        />
+      )}
+    </section>
+  );
+}
+
+interface EditorProps {
+  initial: Draft;
+  type: SlideType | undefined;
+  editable: boolean;
+  user: User;
+  onError: (e: unknown) => void;
+  onSaved: (saved: Draft) => void;
+  onDeleted: () => void;
+  onClose: () => void;
+}
+
+/** Edit dialog over the slide grid: form on the left, preview of the saved state on the right. */
+function SlideEditor({ initial, type, editable, user, onError, onSaved, onDeleted, onClose }: EditorProps) {
+  const [draft, setDraft] = useState<Draft>(initial);
+  // What the server has; closing with other values asks first.
+  const [saved, setSaved] = useState(JSON.stringify(initial));
+  const [busy, setBusy] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
+  const [orientation, setOrientation] = useState<'landscape' | 'portrait'>('landscape');
+  const dirty = draft.id === null || JSON.stringify(draft) !== saved;
+
+  const close = () => {
+    if (editable && dirty && !confirm('Ungespeicherte Änderungen verwerfen?')) return;
+    onClose();
+  };
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      // A media picker opened from the form sits on top and closes first.
+      if (e.key === 'Escape' && document.querySelectorAll('.modal').length === 1) close();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
   const save = async () => {
-    if (!draft) return;
+    setBusy(true);
     try {
       // An image/video background without a chosen file counts as none.
       const background = draft.background && draft.background.kind !== 'color' && !draft.background.mediaId ? null : draft.background;
       const body = { title: draft.title, type: draft.type, config: draft.config, background, duration: draft.duration, published: draft.published };
       const res = draft.id ? await api.put<{ id: string }>(`/slides/${draft.id}`, body) : await api.post<{ id: string }>('/slides', body);
-      const fresh = await api.get<Slide>(`/slides/${res.id}`);
-      setDraft({ ...fresh });
-      await load();
+      const fresh: Draft = { ...(await api.get<Slide>(`/slides/${res.id}`)) };
+      setDraft(fresh);
+      setSaved(JSON.stringify(fresh));
+      setJustSaved(true);
+      onSaved(fresh);
     } catch (e) {
       onError(e);
+    } finally {
+      setBusy(false);
     }
   };
 
   const remove = async () => {
-    if (!draft?.id || !confirm(`Folie „${draft.title}“ löschen?`)) return;
+    if (!draft.id || !confirm(`Folie „${draft.title}“ löschen?`)) return;
     try {
       await api.del(`/slides/${draft.id}`);
-      setDraft(null);
-      await load();
+      onDeleted();
     } catch (e) {
       onError(e);
     }
   };
 
-  const type = draft ? typeOf(draft.type) : undefined;
-  const editable = draft ? mayEdit(draft.type) : false;
+  const change = (next: Draft) => {
+    setDraft(next);
+    setJustSaved(false);
+  };
 
   return (
-    // Without a selection the overview uses the full width; editing switches to list + editor.
-    <section className={draft ? 'split' : 'overview'}>
-      <div className="list">
-        <h1>Folien</h1>
-        {can(user, 'editor') && (
-          <div className="types">
-            {types.filter((t) => mayEdit(t.id)).map((t) => (
-              <button key={t.id} title={t.description} onClick={() => startNew(t)}>+ {t.name}</button>
-            ))}
+    <div className="modal" role="dialog" aria-modal="true" aria-label={draft.title} onMouseDown={(e) => e.target === e.currentTarget && close()}>
+      <div className="modal__box modal__box--editor">
+        <header className="modal__head">
+          <div>
+            <h2>{draft.id ? draft.title : `Neue Folie: ${type?.name ?? draft.type}`}</h2>
+            {draft.id && <span className="muted">{type?.name ?? draft.type}</span>}
           </div>
-        )}
-        <ul className="slide-cards">
-          {slides.map((slide) => (
-            <li key={slide.id}>
-              <button className={draft?.id === slide.id ? 'slide-card active' : 'slide-card'} onClick={() => setDraft({ ...slide })}>
-                <PlayerThumb src={`/p/preview/${slide.id}`} reloadKey={slide.updatedAt} />
-                <span className="slide-card__title">{slide.title}</span>
-                <span className="muted">
-                  {typeOf(slide.type)?.name ?? slide.type}
-                  {slide.published ? '' : ' · Entwurf'}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      </div>
-      {draft && (
-      <div className="detail">
-        {type ? (
-          <div className="editor">
-            <div className="row row--end">
-              <button onClick={() => setDraft(null)}>Zur Übersicht</button>
-            </div>
-            <div className="form">
-              <label className="field">
-                <span>Titel (intern)</span>
-                <input value={draft.title} disabled={!editable} onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
-              </label>
-              <label className="field">
-                <span>{type.durationFromMedia ? 'Dauer in s (leer = so lange wie das Video, sonst in Schleife bis dahin)' : 'Dauer in s (leer = Channel-Standard)'}</span>
-                <input
-                  type="number"
-                  min={1}
-                  value={draft.duration ?? ''}
-                  disabled={!editable}
-                  onChange={(e) => setDraft({ ...draft, duration: e.target.value ? Number(e.target.value) : null })}
-                />
-              </label>
-              <label className="field field--check">
-                <input type="checkbox" checked={draft.published} disabled={!editable} onChange={(e) => setDraft({ ...draft, published: e.target.checked })} />
-                Veröffentlicht
-              </label>
-            </div>
-            <h3>{type.name}</h3>
-            {!editable && <p className="muted">Dieser Folientyp kann nur von Admins bearbeitet werden.</p>}
-            <SchemaForm schema={type.schema} typeId={type.id} value={draft.config} disabled={!editable} user={user} onError={onError} onChange={(config) => setDraft({ ...draft, config })} />
-            {type.backgrounds && type.backgrounds.length > 0 && (
-              <>
-                <h3>Hintergrund</h3>
-                <BackgroundEditor
-                  allowed={type.backgrounds}
-                  value={draft.background}
-                  user={user}
-                  disabled={!editable}
-                  onError={onError}
-                  onChange={(background) => setDraft({ ...draft, background })}
-                />
-              </>
-            )}
-            {editable && (
-              <div className="row">
-                <button className="primary" onClick={save}>Speichern</button>
-                {draft.id && <button className="danger" onClick={remove}>Löschen</button>}
-              </div>
-            )}
-            {draft.id && (
-              <div className="preview">
-                <div className="row">
-                  <strong>Vorschau</strong>
-                  <button className={orientation === 'landscape' ? 'active' : ''} onClick={() => setOrientation('landscape')}>16:9</button>
-                  <button className={orientation === 'portrait' ? 'active' : ''} onClick={() => setOrientation('portrait')}>9:16</button>
-                </div>
-                <div className={`preview__frame preview__frame--${orientation}`}>
-                  <iframe key={`${draft.id}-${draft.updatedAt}`} title="Vorschau" src={`/p/preview/${draft.id}`} />
-                </div>
-                <p className="muted">Die Vorschau zeigt den zuletzt gespeicherten Stand.</p>
-              </div>
-            )}
-          </div>
-        ) : (
+          <button onClick={close} aria-label="Schließen">×</button>
+        </header>
+        {!type ? (
           <p className="error">Unbekannter Folientyp: {draft.type}</p>
+        ) : (
+          <div className="slide-editor">
+            <div className="slide-editor__form">
+              <div className="form">
+                <label className="field">
+                  <span>Titel (intern)</span>
+                  <input value={draft.title} disabled={!editable} onChange={(e) => change({ ...draft, title: e.target.value })} />
+                </label>
+                <label className="field">
+                  <span>{type.durationFromMedia ? 'Dauer in s (leer = so lange wie das Video, sonst in Schleife bis dahin)' : 'Dauer in s (leer = Channel-Standard)'}</span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={draft.duration ?? ''}
+                    disabled={!editable}
+                    onChange={(e) => change({ ...draft, duration: e.target.value ? Number(e.target.value) : null })}
+                  />
+                </label>
+                <label className="field field--check">
+                  <input type="checkbox" checked={draft.published} disabled={!editable} onChange={(e) => change({ ...draft, published: e.target.checked })} />
+                  Veröffentlicht
+                </label>
+              </div>
+              <h3>{type.name}</h3>
+              {!editable && <p className="muted">Dieser Folientyp kann nur von Admins bearbeitet werden.</p>}
+              <SchemaForm schema={type.schema} typeId={type.id} value={draft.config} disabled={!editable} user={user} onError={onError} onChange={(config) => change({ ...draft, config })} />
+              {type.backgrounds && type.backgrounds.length > 0 && (
+                <>
+                  <h3>Hintergrund</h3>
+                  <BackgroundEditor
+                    allowed={type.backgrounds}
+                    value={draft.background}
+                    user={user}
+                    disabled={!editable}
+                    onError={onError}
+                    onChange={(background) => change({ ...draft, background })}
+                  />
+                </>
+              )}
+            </div>
+            <div className="slide-editor__preview">
+              <div className="row">
+                <strong>Vorschau</strong>
+                <button className={orientation === 'landscape' ? 'active' : ''} onClick={() => setOrientation('landscape')}>16:9</button>
+                <button className={orientation === 'portrait' ? 'active' : ''} onClick={() => setOrientation('portrait')}>9:16</button>
+              </div>
+              <div className={`preview__frame preview__frame--${orientation}`}>
+                {draft.id ? (
+                  <iframe key={`${draft.id}-${draft.updatedAt}`} title="Vorschau" src={`/p/preview/${draft.id}`} />
+                ) : (
+                  <p className="preview__empty">Die Vorschau erscheint nach dem ersten Speichern.</p>
+                )}
+              </div>
+              <p className="muted">{draft.id && dirty ? 'Die Vorschau zeigt den zuletzt gespeicherten Stand.' : '\u00a0'}</p>
+            </div>
+          </div>
+        )}
+        {type && editable && (
+          <footer className="modal__foot">
+            <button className="primary" disabled={busy || !dirty} onClick={save}>{busy ? 'Speichert …' : 'Speichern'}</button>
+            {justSaved && !dirty && <span className="saved">Gespeichert</span>}
+            <span className="spacer" />
+            {draft.id && <button className="danger" onClick={remove}>Löschen</button>}
+          </footer>
         )}
       </div>
-      )}
-    </section>
+    </div>
   );
 }
