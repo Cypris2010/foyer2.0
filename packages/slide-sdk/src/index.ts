@@ -47,6 +47,8 @@ export interface ServerContext {
   displayId?: string;
   timeZone: string;
   locale: string;
+  /** WebUntis-Datendienst from the admin settings; null when not set up. Server only: the key never reaches a browser. */
+  untisApi: { url: string; key: string } | null;
   /** Live gateway services (set when the server has them). */
   live?: LiveServices;
 }
@@ -79,7 +81,8 @@ export interface SlideDocument {
   csp: string;
 }
 
-export interface DocumentContext extends ServerContext {
+// Documents are served to browsers: no service credentials.
+export interface DocumentContext extends Omit<ServerContext, 'untisApi'> {
   displayName: string;
 }
 

@@ -2,11 +2,11 @@ import { z } from 'zod';
 import { defineSlideType } from '@foyer/slide-sdk';
 
 export const config = z.object({
-  // No built-in address: each school configures its own export (KONZEPT 3.4).
+  // No built-in address (KONZEPT 3.4): empty uses the WebUntis API from the settings.
   source: z
     .union([z.url({ protocol: /^https?$/ }), z.literal('')])
     .default('')
-    .describe('Datenquelle (TXT-Adresse, Pipe-getrennte Untis-Liste lehrer.txt)'),
+    .describe('Datenquelle: leer = WebUntis-API aus den Einstellungen, sonst Adresse eines Untis-TXT-Exports (lehrer.txt)'),
   teachers: z
     .array(z.string().min(1).max(50))
     .max(500)
@@ -29,7 +29,7 @@ export interface TeacherDashboardData {
 export default defineSlideType({
   id: 'teacher-dashboard',
   name: 'Lehrkräfte-Dashboard (WebUntis)',
-  description: 'Status der Lehrkräfte (anwesend, abwesend, Entfall …) aus dem Untis-Export.',
+  description: 'Status der Lehrkräfte (anwesend, abwesend, Entfall …) aus WebUntis.',
   category: 'school',
   config,
   backgrounds: false,

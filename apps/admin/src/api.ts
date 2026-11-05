@@ -138,10 +138,65 @@ export interface MediaItem {
   poster: string | null;
   thumb: string | null;
   variants: Record<string, { url: string; width: number; height: number }>;
+  /** Imported from an image database: author, source and license. */
+  source: MediaSourceInfo | null;
+  /** Displays show `credit` on slides using the item. */
+  showCredit: boolean;
+  credit: string | null;
   createdAt: number;
   usageCount: number;
   /** Detail view only. */
   usage?: Array<{ id: string; title: string }>;
+}
+
+export interface MediaSourceInfo {
+  provider: string;
+  providerName: string;
+  id: string;
+  title: string | null;
+  author: string | null;
+  authorUrl: string | null;
+  pageUrl: string;
+  license: string;
+  licenseUrl: string | null;
+  /** The license requires the credit where the item is shown. */
+  attribution: boolean;
+  via: string;
+}
+
+/** An image database as editors see it. */
+export interface MediaSourceProvider {
+  id: string;
+  name: string;
+  kinds: MediaKind[];
+  terms: string;
+  homepage: string;
+  needsKey: boolean;
+  /** Usable: needs no key or an admin stored one. */
+  ready: boolean;
+}
+
+export interface SourceHit {
+  id: string;
+  kind: MediaKind;
+  title: string | null;
+  author: string | null;
+  license: string;
+  attribution: boolean;
+  pageUrl: string;
+  /** Preview through our server (/api/media-sources/thumb). */
+  thumb: string;
+  width: number | null;
+  height: number | null;
+  duration: number | null;
+  /** Already in the library. */
+  mediaId: string | null;
+}
+
+export interface SourceSearch {
+  hits: SourceHit[];
+  hasMore: boolean;
+  total: number | null;
 }
 
 /**

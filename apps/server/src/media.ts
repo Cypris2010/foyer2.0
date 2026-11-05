@@ -43,8 +43,29 @@ export interface MediaRow {
   status: MediaStatus;
   error: string | null;
   uploaded_by: string | null;
+  /** MediaSource as JSON when imported from an image database (media-sources.ts). */
+  source_json: string | null;
+  /** 1: the players show the credit line (creditText) on slides using the item. */
+  show_credit: number;
   created_at: number;
   updated_at: number;
+}
+
+/** Where an imported item comes from; kept with it for the credit line. */
+export interface MediaSource {
+  provider: string;
+  providerName: string;
+  id: string;
+  title: string | null;
+  author: string | null;
+  authorUrl: string | null;
+  pageUrl: string;
+  license: string;
+  licenseUrl: string | null;
+  /** The license requires naming the author where the item is shown. */
+  attribution: boolean;
+  /** Collection to credit, e.g. Flickr for an Openverse hit. */
+  via: string;
 }
 
 export interface MediaOptions {
@@ -81,6 +102,8 @@ export function sniff(head: Uint8Array): { kind: MediaKind; ext: string } | null
   if (head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff) return { kind: 'image', ext: 'jpg' };
   if (head[0] === 0x89 && ascii(1, 4) === 'PNG') return { kind: 'image', ext: 'png' };
   if (ascii(0, 4) === 'GIF8') return { kind: 'image', ext: 'gif' };
+  // Ogg Theora, the older video format of Wikimedia Commons.
+  if (ascii(0, 4) === 'OggS') return { kind: 'video', ext: 'ogv' };
   if (ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WEBP') return { kind: 'image', ext: 'webp' };
   if (head[0] === 0x1a && head[1] === 0x45 && head[2] === 0xdf && head[3] === 0xa3) return { kind: 'video', ext: 'mkv' };
   if (ascii(4, 8) === 'ftyp') {
@@ -98,6 +121,14 @@ export function cleanName(name: string | undefined): string {
 }
 
 export const mediaUrl = (file: string) => `/media/${file}`;
+
+/** Credit line for displays: "Foto: „Titel“, Name · CC BY-SA 4.0 · Wikimedia Commons". */
+export function creditText(kind: MediaKind, source: MediaSource): string {
+  // CC 2.0/3.0 ask for the title when one is given; long ones are file names, not titles.
+  const title = source.title && source.title.length <= 60 && source.provider !== 'pixabay' ? `„${source.title}“, ` : '';
+  const author = source.author ?? 'unbekannt';
+  return `${kind === 'video' ? 'Video' : 'Foto'}: ${title}${author} · ${source.license} · ${source.via}`;
+}
 
 /** Files of a media item that players and the admin load. */
 export function derivedFiles(row: Pick<MediaRow, 'variants_json' | 'poster' | 'thumb'>): string[] {
@@ -218,8 +249,16 @@ export class MediaLibrary {
     rows.forEach((row) => this.enqueue(row.id));
   }
 
-  /** Stores an upload. Returns the existing item when the same file was uploaded before. */
-  async ingest(body: ReadableStream<Uint8Array> | AsyncIterable<Uint8Array>, name: string | undefined, userId: string | null): Promise<{ row: MediaRow; existing: boolean }> {
+  /**
+   * Stores an upload or an import (with `source`). Returns the existing item
+   * when the same file was there before; an import adds its source to it.
+   */
+  async ingest(
+    body: ReadableStream<Uint8Array> | AsyncIterable<Uint8Array>,
+    name: string | undefined,
+    userId: string | null,
+    source?: MediaSource,
+  ): Promise<{ row: MediaRow; existing: boolean }> {
     const tmp = join(this.tmpDir, crypto.randomUUID());
     const hash = createHash('sha256');
     const out = createWriteStream(tmp);
@@ -237,11 +276,17 @@ export class MediaLibrary {
       await finished(out);
       if (!size) throw new MediaError(400, 'Leere Datei');
       const type = sniff(head);
-      if (!type) throw new MediaError(400, 'Dateityp nicht unterstützt. Erlaubt sind Bilder (JPEG, PNG, GIF, WebP, HEIC, AVIF) und Videos (MP4, MOV, WebM, MKV).');
+      if (!type) throw new MediaError(400, 'Dateityp nicht unterstützt. Erlaubt sind Bilder (JPEG, PNG, GIF, WebP, HEIC, AVIF) und Videos (MP4, MOV, WebM, MKV, Ogg).');
       const sha256 = hash.digest('hex');
       const existing = this.db.prepare('SELECT * FROM media WHERE sha256 = ?').get(sha256) as MediaRow | undefined;
       if (existing) {
         await rm(tmp, { force: true });
+        if (source && !existing.source_json) {
+          this.db
+            .prepare('UPDATE media SET source_json = ?, show_credit = ?, updated_at = ? WHERE id = ?')
+            .run(JSON.stringify(source), source.attribution ? 1 : 0, this.now(), existing.id);
+          return { row: this.get(existing.id)!, existing: true };
+        }
         return { row: existing, existing: true };
       }
       await rename(tmp, join(this.originalsDir, `${sha256}.${type.ext}`));
@@ -249,10 +294,10 @@ export class MediaLibrary {
       const now = this.now();
       this.db
         .prepare(
-          `INSERT INTO media (id, sha256, kind, name, original_ext, size, status, uploaded_by, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?)`,
+          `INSERT INTO media (id, sha256, kind, name, original_ext, size, status, uploaded_by, source_json, show_credit, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?)`,
         )
-        .run(id, sha256, type.kind, cleanName(name), type.ext, size, userId, now, now);
+        .run(id, sha256, type.kind, cleanName(name), type.ext, size, userId, source ? JSON.stringify(source) : null, source?.attribution ? 1 : 0, now, now);
       this.enqueue(id);
       return { row: this.get(id)!, existing: false };
     } catch (err) {

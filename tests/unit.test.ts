@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { clientIp, ipInCidr } from '../apps/server/src/net.ts';
 import { hashPassword, verifyPassword } from '../apps/server/src/crypto.ts';
 import { displayState } from '../apps/server/src/status.ts';
+import { EventHub } from '../apps/server/src/events.ts';
 import { fillPlaceholders } from '../packages/slide-sdk/src/runtime.ts';
 import { buildDocument, parseVariables } from '../slide-types/html/document.ts';
 import { config as htmlConfig } from '../slide-types/html/index.ts';
@@ -92,5 +93,19 @@ describe('HTML-Folie', () => {
   it('erlaubt externe Ressourcen nur auf Wunsch', () => {
     const config = htmlConfig.parse({ allowExternal: true });
     expect(buildDocument(config, { locale: 'de-DE', timeZone: 'Europe/Berlin', displayName: '' }).csp).toContain('img-src data: blob: https:');
+  });
+});
+
+describe('Ereignisse an Displays', () => {
+  it('verliert eine neue Verbindung nicht, wenn die alte sich doppelt abmeldet', () => {
+    const hub = new EventHub();
+    const unsubscribeOld = hub.subscribe('d1', () => undefined);
+    unsubscribeOld(); // Abbruch der alten Verbindung
+    const received: string[] = [];
+    hub.subscribe('d1', (event) => received.push(event)); // Display verbindet sich neu
+    unsubscribeOld(); // Ende der Schleife der alten Verbindung, bis zu 25 s später
+    hub.send('d1', 'identify');
+    expect(received).toEqual(['identify']);
+    expect(hub.connected('d1')).toBe(1);
   });
 });
