@@ -6,3 +6,4 @@ data/
 .DS_Store
 apps/probe/reports/
 probe-reports/
+deploy/.env

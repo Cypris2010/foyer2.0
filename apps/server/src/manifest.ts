@@ -240,8 +240,8 @@ export async function buildSlideEntry(
   if (entry.server.live && !result.error) {
     const input = entry.server.live(parsed.data);
     if (!input) result.error = 'Keine Live-Quelle gewählt';
-    else if (!ctx.live?.available) result.error = 'Live-Video ist auf dem Server nicht eingerichtet (MediaMTX fehlt)';
-    else if (input.kind === 'ndi' && !ctx.live.ndiAvailable) result.error = 'Der Server hat keinen NDI-Eingang';
+    // Gateway down or without NDI: the slide shows "nicht verfügbar" and retries.
+    else if (!ctx.live) result.error = 'Live-Video ist auf dem Server nicht eingerichtet (kein Live-Gateway)';
     else result.liveUrl = liveUrl(ctx, slide.id, slide.updated_at, documentDisplayId);
   }
   return result;

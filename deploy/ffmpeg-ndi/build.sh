@@ -5,7 +5,7 @@
 # "nonfree" build: fine to build and use on your own server, NOT allowed to redistribute.
 # Never push an image or binary built with this script to a public registry.
 #
-# Usage (Debian/Ubuntu, as root; the Dockerfile runs it with FOYER_NDI=1):
+# Usage (Debian/Ubuntu, as root; apps/live-gateway/Dockerfile runs it with FOYER_NDI=1):
 #   NDI_LICENSE=accept deploy/ffmpeg-ndi/build.sh
 #
 # NDI_LICENSE=accept means: you have read and accept the NDI SDK licence

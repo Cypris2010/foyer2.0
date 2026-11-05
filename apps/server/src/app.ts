@@ -673,10 +673,10 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
   });
 
   // --- Live video (live slides) --------------------------------------------------
-  // WHEP signalling for the gateway (live.ts): signed URL from the manifest, then
-  // school networks (displays) or a session (admin previews), like slide data.
-  // The SDP offer goes to the local MediaMTX; the media flows directly over the
-  // WebRTC port.
+  // WHEP signalling for the live gateway (live.ts): signed URL from the manifest,
+  // then school networks (displays) or a session (admin previews), like slide data.
+  // The SDP offer goes to the gateway with the slide's source; the media flows
+  // directly from the gateway's WebRTC port to the display.
   app.post('/content/live/:id/:version/whep', async (c) => {
     const slideId = c.req.param('id');
     const version = Number(c.req.param('version'));
@@ -697,10 +697,8 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
     if (!input || !ctx.live) return c.text('Keine Live-Quelle', 404);
     c.header('Cache-Control', 'no-store');
     try {
-      const path = await ctx.live.ensure(input);
-      const answer = await ctx.live.whep(path, offer);
-      if (answer.status !== 201) return c.text(`Live-Quelle nicht verfügbar (${answer.status})`, 502);
-      return c.body(answer.sdp, 201, { 'Content-Type': 'application/sdp' });
+      const answer = await ctx.live.whep(input, offer);
+      return c.body(answer, 201, { 'Content-Type': 'application/sdp' });
     } catch (err) {
       return c.text(`Live-Quelle nicht verfügbar: ${(err as Error).message}`, 502);
     }

@@ -1,6 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import type { AddressInfo } from 'node:net';
+import type { Server } from 'node:http';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { setup } from './helpers.ts';
-import { ingestArgs, LiveGateway, livePathName, mediamtxConfig, type LiveOptions } from '../apps/server/src/live.ts';
+import { ingestArgs, LiveGateway as MediaGateway, livePathName, mediamtxConfig, type LiveOptions } from '../apps/live-gateway/src/live.ts';
+import { createGatewayServer, parseLiveInput, type GatewayBackend } from '../apps/live-gateway/src/api.ts';
+import { LiveGateway } from '../apps/server/src/live.ts';
 import type { LiveInput } from '@foyer/slide-sdk';
 import { config as liveConfig } from '../slide-types/live/index.ts';
 import liveServer from '../slide-types/live/server.ts';
@@ -73,8 +77,75 @@ describe('Live-Gateway', () => {
   });
 
   it('meldet fehlendes MediaMTX und fehlenden NDI-Eingang', async () => {
-    await expect(new LiveGateway({ ...options, mediamtx: '' }).ensure(ndi)).rejects.toThrow(/MediaMTX fehlt/);
-    await expect(new LiveGateway({ ...options, mediamtx: 'mediamtx', ffmpegNdi: '' }).ensure(ndi)).rejects.toThrow(/keinen NDI-Eingang/);
+    await expect(new MediaGateway({ ...options, mediamtx: '' }).ensure(ndi)).rejects.toThrow(/ohne MediaMTX/);
+    await expect(new MediaGateway({ ...options, mediamtx: 'mediamtx', ffmpegNdi: '' }).ensure(ndi)).rejects.toThrow(/keinen NDI-Eingang/);
+  });
+});
+
+const KEY = 'k'.repeat(32);
+
+describe('Live-Gateway-Schnittstelle', () => {
+  const calls: Array<{ name: string; offer: string }> = [];
+  const backend: GatewayBackend = {
+    ndi: true,
+    ensure: async (input) => livePathName(input),
+    whep: async (name, offer) => {
+      calls.push({ name, offer });
+      return { status: 201, sdp: 'v=0 answer' };
+    },
+    ndiSources: async (groups) => [{ name: `AULA (${groups.join('+') || 'default'})`, address: '10.48.20.5:5961' }],
+  };
+  let server: Server;
+  let url: string;
+  beforeAll(async () => {
+    server = createGatewayServer(backend, KEY);
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  });
+  afterAll(() => server.close());
+
+  it('antwortet nur mit dem gemeinsamen Schlüssel', async () => {
+    expect((await fetch(`${url}/status`)).status).toBe(401);
+    expect((await fetch(`${url}/status`, { headers: { Authorization: 'Bearer falsch' } })).status).toBe(401);
+    await expect(new LiveGateway(url, 'falsch').status()).rejects.toThrow(/Schlüssel/);
+    expect(await new LiveGateway(url, KEY).status()).toEqual({ ndi: true });
+  });
+
+  it('meldet die Quelle an und gibt das WHEP-Angebot weiter', async () => {
+    const input: LiveInput = { kind: 'url', value: 'rtsp://10.0.0.20/stream1', profile: '720p30', audio: false };
+    expect(await new LiveGateway(`${url}/`, KEY).whep(input, 'v=0 offer')).toBe('v=0 answer');
+    expect(calls.at(-1)).toEqual({ name: livePathName(input), offer: 'v=0 offer' });
+  });
+
+  it('sucht NDI-Quellen in den Gruppen der Folie', async () => {
+    expect(await new LiveGateway(url, KEY).ndiSources(['public', 'lgstv'])).toEqual([{ name: 'AULA (public+lgstv)', address: '10.48.20.5:5961' }]);
+    await expect(new LiveGateway(url, KEY).ndiSources(['lgstv"}'])).rejects.toThrow(/Ungültige NDI-Gruppen/);
+  });
+
+  it('nimmt nur Quellen an, die eine Live-Folie erzeugen kann', () => {
+    const ok = { kind: 'ndi', value: 'AULA (Program) $HOME', groups: ['lgstv'], profile: '1080p30', audio: true };
+    expect(parseLiveInput(ok)).toEqual(ok);
+    expect(parseLiveInput({ ...ok, groups: [] })).not.toHaveProperty('groups');
+    expect(parseLiveInput({ ...ok, kind: 'url', groups: undefined, value: 'file:///etc/passwd' })).toBeNull();
+    expect(parseLiveInput({ ...ok, value: 'a\nb' })).toBeNull();
+    expect(parseLiveInput({ ...ok, profile: '4k' })).toBeNull();
+    expect(parseLiveInput({ ...ok, groups: ['x"}'] })).toBeNull();
+    expect(parseLiveInput({ ...ok, profile: 'toString' })).toBeNull();
+  });
+
+  it('lehnt ungültige Anfragen ab und meldet fehlenden NDI-Eingang', async () => {
+    const post = (body: string) => fetch(`${url}/whep`, { method: 'POST', headers: { Authorization: `Bearer ${KEY}` }, body });
+    expect((await post('kein json')).status).toBe(400);
+    expect((await post(JSON.stringify({ input: { kind: 'url', value: 'file:///x', profile: '720p30', audio: false }, offer: 'v=0' }))).status).toBe(400);
+    const noNdi = createGatewayServer({ ...backend, ndi: false }, KEY);
+    await new Promise<void>((resolve) => noNdi.listen(0, '127.0.0.1', resolve));
+    const noNdiUrl = `http://127.0.0.1:${(noNdi.address() as AddressInfo).port}`;
+    await expect(new LiveGateway(noNdiUrl, KEY).ndiSources()).rejects.toThrow(/keinen NDI-Eingang/);
+    noNdi.close();
+  });
+
+  it('meldet ein nicht erreichbares Gateway verständlich', async () => {
+    await expect(new LiveGateway('http://127.0.0.1:1', KEY).status()).rejects.toThrow(/nicht erreichbar/);
   });
 });
 
@@ -102,14 +173,11 @@ const offer = (headers: Record<string, string> = {}) => ({
 });
 
 describe('Live-Folie', () => {
-  const calls: Array<{ name: string; sdp: string }> = [];
+  const calls: Array<{ input: LiveInput; sdp: string }> = [];
   const gateway: Partial<LiveGateway> = {
-    available: true,
-    ndiAvailable: false,
-    ensure: async (input) => livePathName(input),
-    whep: async (name, sdp) => {
-      calls.push({ name, sdp });
-      return { status: 201, sdp: 'v=0 answer' };
+    whep: async (input, sdp) => {
+      calls.push({ input, sdp });
+      return 'v=0 answer';
     },
   };
 
@@ -121,7 +189,7 @@ describe('Live-Folie', () => {
     expect(res.status).toBe(201);
     expect(res.headers.get('content-type')).toBe('application/sdp');
     expect(await res.text()).toBe('v=0 answer');
-    expect(calls.at(-1)).toEqual({ name: livePathName({ kind: 'url', value: 'rtsp://10.0.0.20/stream1', profile: '720p30', audio: false }), sdp: 'v=0\r\n' });
+    expect(calls.at(-1)).toEqual({ input: { kind: 'url', value: 'rtsp://10.0.0.20/stream1', profile: '720p30', audio: false }, sdp: 'v=0\r\n' });
   });
 
   it('verweigert falsche Signatur, fremde Netze und fremde Inhalte', async () => {
@@ -129,6 +197,13 @@ describe('Live-Folie', () => {
     expect((await app.request(slide.liveUrl.replace(/s=[^&]+/, 's=falsch'), offer())).status).toBe(403);
     expect((await app.request(slide.liveUrl, offer({ 'x-test-remote': '8.8.8.8' }))).status).toBe(403);
     expect((await app.request(slide.liveUrl, { ...offer(), headers: { 'content-type': 'text/plain' } })).status).toBe(415);
+  });
+
+  it('meldet ein ausgefallenes Gateway dem Display als 502', async () => {
+    const { app, slide } = await liveSetup({ whep: async () => Promise.reject(new Error('Live-Gateway nicht erreichbar')) });
+    const res = await app.request(slide.liveUrl, offer());
+    expect(res.status).toBe(502);
+    expect(await res.text()).toMatch(/nicht erreichbar/);
   });
 
   it('zeigt einen Fehler statt einer Adresse, wenn der Server kein Live-Video hat', async () => {

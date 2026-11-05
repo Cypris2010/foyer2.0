@@ -1,9 +1,9 @@
 // NDI live input through a separate, self-built ffmpeg (deploy/ffmpeg-ndi/build.sh).
 // Upstream ffmpeg has no NDI, so the regular FOYER_FFMPEG never does this.
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { sha256 } from './crypto.ts';
 
 export interface NdiSource {
   name: string;
@@ -72,14 +72,14 @@ export function useNdiGroups(dir: string, groups: string[]) {
 
 /** Like useNdiGroups for a single ffmpeg (a slide's own groups): returns the NDI_CONFIG_DIR to pass it. */
 export function ndiConfigDir(baseDir: string, groups: string[]): string {
-  const dir = join(baseDir, `groups-${sha256(groups.join(',')).slice(0, 16)}`);
+  const dir = join(baseDir, `groups-${createHash('sha256').update(groups.join(',')).digest('hex').slice(0, 16)}`);
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'ndi-config.v1.json'), JSON.stringify(ndiConfig(groups), null, 2));
   return dir;
 }
 
 /**
- * NDI sources visible from this server (mDNS, plus `extraIps` for other subnets), in the
+ * NDI sources visible from the gateway (mDNS, plus `extraIps` for other subnets), in the
  * groups of `configDir` (from ndiConfigDir) or else the process default.
  */
 export async function findNdiSources(

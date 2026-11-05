@@ -1,8 +1,4 @@
-import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-
-const NDI_FFMPEG_DEFAULT = '/opt/ffmpeg-ndi/bin/ffmpeg';
-const MEDIAMTX_DEFAULT = '/opt/mediamtx/mediamtx';
 
 function list(value: string | undefined, fallback: string[]): string[] {
   if (!value) return fallback;
@@ -38,18 +34,9 @@ export const config = {
   // Media pipeline (KONZEPT 6.2): ffmpeg/ffprobe on the server, upload limit in MB.
   ffmpeg: process.env.FOYER_FFMPEG ?? 'ffmpeg',
   ffprobe: process.env.FOYER_FFPROBE ?? 'ffprobe',
-  // Separate ffmpeg with NDI input (deploy/ffmpeg-ndi/build.sh); empty = no NDI.
-  ffmpegNdi: process.env.FOYER_FFMPEG_NDI ?? (existsSync(NDI_FFMPEG_DEFAULT) ? NDI_FFMPEG_DEFAULT : ''),
-  // Live gateway (live.ts): MediaMTX binary, WebRTC media port for the displays, extra
-  // addresses to announce (the server's LAN IP when it runs behind NAT), NDI hosts in other subnets.
-  mediamtx: process.env.FOYER_MEDIAMTX ?? (existsSync(MEDIAMTX_DEFAULT) ? MEDIAMTX_DEFAULT : ''),
-  liveMediaPort: Number(process.env.FOYER_LIVE_PORT ?? 8189),
-  liveHosts: list(process.env.FOYER_LIVE_HOSTS, []),
-  // First of three ports MediaMTX uses on 127.0.0.1 (RTSP ingest, WHEP, API).
-  liveLocalPorts: Number(process.env.FOYER_LIVE_LOCAL_PORTS ?? 18550),
-  ndiExtraIps: list(process.env.FOYER_NDI_EXTRA_IPS, []),
-  // NDI groups to search; empty = the NDI default ("public").
-  ndiGroups: list(process.env.FOYER_NDI_GROUPS, []),
+  // Live gateway for live slides (apps/live-gateway, own container); empty = no live video.
+  liveGateway: process.env.FOYER_LIVE_GATEWAY ?? '',
+  liveGatewayKey: process.env.FOYER_LIVE_GATEWAY_KEY ?? '',
   mediaMaxMb: Number(process.env.FOYER_MEDIA_MAX_MB ?? 2048),
   sessionIdleHours: 8,
   sessionMaxDays: 7,

@@ -10,7 +10,7 @@ export interface AppContext {
   registry: Registry;
   events: EventHub;
   media: MediaLibrary;
-  /** Live gateway (live.ts); absent in tests that do not need it. */
+  /** Client for the live gateway (live.ts); absent when FOYER_LIVE_GATEWAY is not set. */
   live?: LiveGateway;
   /** Handed to slide-type servers (option lists, e.g. NDI sources). */
   liveServices?: LiveServices;

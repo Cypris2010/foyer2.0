@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { ndiAvailable, ndiConfigDir, parseNdiSources, useNdiGroups } from '../apps/server/src/ndi.ts';
+import { ndiAvailable, ndiConfigDir, parseNdiSources, useNdiGroups } from '../apps/live-gateway/src/ndi.ts';
 
 describe('NDI', () => {
   it('reads the source list of -find_sources', () => {
