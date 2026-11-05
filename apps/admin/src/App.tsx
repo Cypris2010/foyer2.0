@@ -6,6 +6,7 @@ import { Slides } from './Slides.tsx';
 import { CalendarPage } from './CalendarPage.tsx';
 import { MediaPage } from './Media.tsx';
 import { SettingsPage } from './Settings.tsx';
+import { ThemeSwitch } from './ThemeSwitch.tsx';
 
 const pages = { displays: 'Displays', calendar: 'Kalender', channels: 'Channels', slides: 'Folien', media: 'Medien', settings: 'Einstellungen' } as const;
 // Pages only admins see.
@@ -80,6 +81,7 @@ export function App() {
           <a key={p} href={`#${p}`} className={page === p ? 'active' : ''}>{pages[p]}</a>
         ))}
         <span className="spacer" />
+        <ThemeSwitch />
         <span className="muted">{user.name} ({user.role})</span>
         <button onClick={logout}>Abmelden</button>
       </nav>
