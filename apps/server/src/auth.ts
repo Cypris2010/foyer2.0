@@ -6,6 +6,7 @@ import type { Role } from '@foyer/slide-sdk';
 import type { Db } from './db.ts';
 import { randomToken, sha256, verifyPassword } from './crypto.ts';
 import { config } from './config.ts';
+import { apiKeyUser } from './api-keys.ts';
 
 export const SESSION_COOKIE = 'foyer_session';
 const ROLE_RANK: Record<Role, number> = { viewer: 0, editor: 1, admin: 2 };
@@ -19,7 +20,8 @@ export interface SessionUser {
   role: Role;
 }
 
-export type AuthEnv = { Variables: { user: SessionUser; clientIp: string } };
+/** authVia: a login session (admin) or a personal API key (api-keys.ts). */
+export type AuthEnv = { Variables: { user: SessionUser; authVia: 'session' | 'key'; clientIp: string } };
 
 export function hasRole(user: SessionUser, role: Role): boolean {
   return ROLE_RANK[user.role] >= ROLE_RANK[role];
@@ -126,10 +128,12 @@ export function logout(c: Context, db: Db) {
 
 export function requireUser(db: Db, role: Role = 'viewer'): MiddlewareHandler<AuthEnv> {
   return async (c, next) => {
-    const user = sessionUser(db, getCookie(c, SESSION_COOKIE));
+    const session = sessionUser(db, getCookie(c, SESSION_COOKIE));
+    const user = session ?? apiKeyUser(db, c.req.header('authorization'));
     if (!user) return c.json({ error: 'Nicht angemeldet' }, 401);
     if (!hasRole(user, role)) return c.json({ error: 'Keine Berechtigung' }, 403);
     c.set('user', user);
+    c.set('authVia', session ? 'session' : 'key');
     await next();
   };
 }

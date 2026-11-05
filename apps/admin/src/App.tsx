@@ -6,8 +6,9 @@ import { Slides } from './Slides.tsx';
 import { CalendarPage } from './CalendarPage.tsx';
 import { MediaPage } from './Media.tsx';
 import { SettingsPage } from './Settings.tsx';
+import { AiAccessPage } from './AiAccess.tsx';
 
-const pages = { displays: 'Displays', calendar: 'Kalender', channels: 'Channels', slides: 'Folien', media: 'Medien', settings: 'Einstellungen' } as const;
+const pages = { displays: 'Displays', calendar: 'Kalender', channels: 'Channels', slides: 'Folien', media: 'Medien', ai: 'KI-Zugang', settings: 'Einstellungen' } as const;
 // Pages only admins see.
 const adminPages = new Set<Page>(['settings']);
 type Page = keyof typeof pages;
@@ -94,6 +95,7 @@ export function App() {
         {page === 'channels' && <Channels user={user} onError={onError} />}
         {page === 'slides' && <Slides user={user} onError={onError} />}
         {page === 'media' && <MediaPage user={user} onError={onError} />}
+        {page === 'ai' && <AiAccessPage user={user} onError={onError} />}
         {page === 'settings' && can(user, 'admin') && <SettingsPage user={user} onError={onError} />}
       </main>
     </div>

@@ -132,6 +132,8 @@ Bilder und Videos lädt man im Admin unter **Medien** hoch und nutzt sie als Fol
 
 Die Dateien liegen unter `FOYER_DATA_DIR/media` (`originals/` für die Uploads, `files/` für die umgewandelten Dateien mit Inhalts-Hash im Namen). Ausgeliefert werden sie unter `/media/…` nur ins Schulnetz (`FOYER_PLAYER_NETWORKS`) und an angemeldete Benutzer. Dateien, die eine Folie noch nutzt, lassen sich nicht löschen.
 
+**In HTML-Folien** bindet man Medien mit dem Platzhalter `{{media:<ID>}}` ein, in HTML, CSS und JS, z. B. `<img src="{{media:…}}">`, `<video src="{{media:…}}" autoplay muted loop playsinline>` oder `background-image: url({{media:…}})`. Die Detailansicht eines Mediums zeigt den Platzhalter zum Kopieren. Der Server setzt die Adresse der umgewandelten Datei mit Signatur ein. Die Signatur braucht es, weil die Sandbox der HTML-Folie keine Anmelde-Cookies mitschickt und Vorschauen außerhalb des Schulnetzes sonst kein Bild bekämen. Die CSP der Folie erlaubt dafür Bilder und Videos vom eigenen Server (`'self'`). Solche Medien zählen als verwendet, bekommen ihren Bildnachweis auf den Displays, und die Folie erscheint erst, wenn die Umwandlung fertig ist. Unbekannte IDs lehnt der Server beim Speichern ab.
+
 ### Bilddatenbanken
 
 Unter **Medien → Aus Bilddatenbank** (auch im Auswahldialog einer Folie) sucht man in freien Bilddatenbanken. Ein Klick auf „Übernehmen“ lädt den Treffer auf den Server. Dort läuft er wie ein Upload durch die Mediathek: Er wird umgewandelt, bekommt ein Vorschaubild und wird über den Inhalts-Hash dedupliziert. Urheber, Quelle und Lizenz werden mit dem Medium gespeichert und in der Detailansicht verlinkt.
@@ -148,6 +150,17 @@ Unter **Medien → Aus Bilddatenbank** (auch im Auswahldialog einer Folie) sucht
 - **Nur der Server** spricht mit den Datenbanken. Die Vorschaubilder kommen über `/api/media-sources/thumb` mit signierter Adresse, die Browser im Kollegium laden also nichts von außen (CSP `img-src 'self'`). Beim Übernehmen fragt der Server die Datenbank nach der ID des Treffers und lädt nur die Datei, die sie nennt, nie eine Adresse aus dem Browser. Zugelassen ist dabei nur https zu benannten Hosts, auch bei Weiterleitungen. Suchergebnisse werden im Speicher zwischengespeichert, bei Pixabay 24 Stunden (Vorgabe der API).
 - **Größen:** Von Commons kommt bei Bildern eine 1920-px-Fassung statt des Originals, bei Videos die 1080p-WebM-Fassung. Pixabay-Videos höchstens 1080p, Unsplash-Fotos 1920 px. Pixabay sucht mit `safesearch`, Unsplash mit `content_filter=high`, Openverse ohne als „mature“ markierte Bilder; Unsplash+-Fotos sind ausgeblendet. Übernehmen dürfen Redakteure und Admins, wie beim Upload.
 - Pexels ist nicht dabei, weil es keine neuen API-Schlüssel mehr vergibt. Weitere Quellen kommen als `Provider` in [`apps/server/src/media-sources.ts`](apps/server/src/media-sources.ts) dazu.
+
+### KI-Zugang (MCP)
+
+Ein KI-Assistent wie Claude kann über das [Model Context Protocol](https://modelcontextprotocol.io) Folien anlegen und ändern, die Mediathek und die Bilddatenbanken durchsuchen, Treffer übernehmen und Folien einplanen. Der Endpunkt ist `/mcp` am Foyer-Server (Streamable HTTP, zustandslos, nur POST).
+
+- **Schlüssel:** Jedes Konto erzeugt sich unter **KI-Zugang** einen persönlichen API-Schlüssel (`foyer_…`), der nur einmal angezeigt wird. Ohne Admin geht es auch per `npm run cli -w @foyer/server -- apikey:create <email> [name]`. Gespeichert wird nur der Hash. Widerrufen geht auf derselben Seite; mit dem Konto verschwinden auch seine Schlüssel.
+- **Rechte:** Der Assistent hat genau die Rechte des Kontos. Jedes Werkzeug ruft intern die Admin-API mit dem Schlüssel auf, also gelten dieselben Prüfungen, und alles steht im Audit-Log. HTML-Folien gibt es deshalb nur für Admins. Mit einem Schlüssel lassen sich keine weiteren Schlüssel anlegen.
+- **Werkzeuge:** `get_overview`, `get_slide_type` (JSON-Schema und Gestaltungshinweise je Folientyp), `get_field_options`, `list_slides`, `get_slide`, `create_slide`, `update_slide`, `delete_slide`, `list_media`, `search_stock_media` (mit Vorschaubildern, damit der Assistent passende Bilder auswählen kann), `import_stock_media`, `list_schedules`, `create_schedule`, `delete_schedule`.
+- **Verbinden:** Die Seite **KI-Zugang** zeigt die fertigen Befehle mit Adresse und Schlüssel. Claude Code: `claude mcp add --transport http foyer https://foyer.schule.de/mcp --header "Authorization: Bearer foyer_…"`. Claude Desktop bindet den Endpunkt über `mcp-remote` als lokalen Server ein (braucht Node.js).
+- **Netz:** Der Assistent läuft auf dem Rechner der Person, die ihn nutzt, und muss den Foyer-Server erreichen. Die Connectors von claude.ai im Browser verbinden sich dagegen aus der Cloud von Anthropic; dafür müsste `/mcp` aus dem Internet erreichbar sein und OAuth können, beides ist noch nicht eingebaut.
+- **Datenschutz:** Was der Assistent liest (Folien, Kalender, Displaynamen) geht an den KI-Anbieter. Stundenplandaten aus WebUntis liest er nicht, weil sie nicht in den Folien stehen. Über `get_field_options` sieht er aber die Auswahllisten, beim Lehrkräfte-Dashboard also die Kürzel der Lehrkräfte.
 
 ### Synchrone Displays und Display-Wände
 

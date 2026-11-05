@@ -183,6 +183,20 @@ const migrations: Array<string | ((db: DatabaseSync) => void)> = [
   `
   ALTER TABLE displays ADD COLUMN wall_mode TEXT NOT NULL DEFAULT 'span' CHECK (wall_mode IN ('span', 'stack'));
   `,
+  // Personal API keys (api-keys.ts), e.g. for AI assistants over MCP (mcp.ts).
+  // They act with the rights of their user; only the hash is stored.
+  `
+  CREATE TABLE api_keys (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    key_hash TEXT NOT NULL UNIQUE,
+    hint TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    last_used_at INTEGER
+  );
+  CREATE INDEX api_keys_user ON api_keys (user_id);
+  `,
 ];
 
 export type Db = DatabaseSync;

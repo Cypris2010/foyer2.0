@@ -293,7 +293,7 @@ button.filter.is-active { color: var(--text); font-weight: 600; }
 .stock-hit__error { font-size: 0.8rem; }
 .credit-toggle { margin-top: 0.75rem; }
 .credit-preview { margin: 0.25rem 0; padding: 0.3rem 0.6rem; border-radius: 6px; background: #0f172a; color: #e2e8f0; font-size: 0.85rem; }
-.card--wide { grid-column: 1 / -1; }
+.card--wide { grid-column: 1 / -1; min-width: 0; }
 .media-source { border-top: 1px solid var(--border); padding-top: 0.75rem; display: grid; gap: 0.4rem; }
 .media-source header { justify-content: flex-start; }
 .media-source header .badge { margin-left: auto; }
@@ -309,3 +309,9 @@ button.filter.is-active { color: var(--text); font-weight: 600; }
 .wall-grid__cell.is-empty { border-style: dashed; }
 .test-pattern { display: inline-flex; gap: 0.25rem; align-items: center; padding: 0.15rem 0.25rem; border: 1px solid var(--accent); border-radius: 6px; }
 .test-pattern__name { padding: 0 0.4rem; font-size: 0.85rem; white-space: nowrap; cursor: help; }
+
+/* AI access (AiAccess.tsx) */
+.snippet { min-width: 0; }
+.snippet pre { margin: 0.25rem 0 0; padding: 0.6rem 0.75rem; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; overflow-x: auto; font-size: 12.5px; }
+.row--snippet { margin: 0; justify-content: space-between; }
+.secret { user-select: all; word-break: break-all; }
