@@ -1,7 +1,8 @@
-// Central settings (admins only): connections to outside services
-// (WebUntis-API, image databases for the media library).
+// Settings: everyone manages their AI access (API keys); admins also the
+// connections to outside services (WebUntis-API, image databases).
 import { useEffect, useState, type FormEvent } from 'react';
-import { api, type User } from './api.ts';
+import { api, can, type User } from './api.ts';
+import { AiAccessSettings } from './AiAccess.tsx';
 
 interface UntisApiState {
   url: string;
@@ -263,11 +264,16 @@ function MediaSourceSettings({ onError }: { onError: (e: unknown) => void }) {
   );
 }
 
-export function SettingsPage({ onError }: { user: User; onError: (e: unknown) => void }) {
+export function SettingsPage({ user, onError }: { user: User; onError: (e: unknown) => void }) {
   return (
     <div className="cards">
-      <UntisApiSettings onError={onError} />
-      <MediaSourceSettings onError={onError} />
+      {can(user, 'admin') && (
+        <>
+          <UntisApiSettings onError={onError} />
+          <MediaSourceSettings onError={onError} />
+        </>
+      )}
+      <AiAccessSettings user={user} onError={onError} />
     </div>
   );
 }

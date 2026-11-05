@@ -532,7 +532,7 @@ export function registerMcp(app: Hono<AuthEnv>, ctx: AppContext) {
     if (origin && new URL(origin).host !== host) return c.json(rpcError(null, -32000, 'Fremde Herkunft abgelehnt'), 403);
     const user = apiKeyUser(db, c.req.header('authorization'), ctx.now());
     if (!user) {
-      return c.json(rpcError(null, -32001, 'API-Schlüssel fehlt oder ist ungültig (Admin → KI-Zugang)'), 401, { 'WWW-Authenticate': 'Bearer realm="foyer"' });
+      return c.json(rpcError(null, -32001, 'API-Schlüssel fehlt oder ist ungültig (Admin → Einstellungen → KI-Zugang)'), 401, { 'WWW-Authenticate': 'Bearer realm="foyer"' });
     }
     const body = await c.req.json().catch(() => undefined);
     if (body === undefined) return c.json(rpcError(null, -32700, 'Kein gültiges JSON'), 400);

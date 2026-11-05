@@ -33,7 +33,7 @@ function Snippet({ label, text }: { label: string; text: string }) {
   );
 }
 
-export function AiAccessPage({ user, onError }: { user: User; onError: (e: unknown) => void }) {
+export function AiAccessSettings({ user, onError }: { user: User; onError: (e: unknown) => void }) {
   const [keys, setKeys] = useState<ApiKey[] | null>(null);
   const [name, setName] = useState('Claude');
   const [fresh, setFresh] = useState<string | null>(null);
@@ -81,7 +81,7 @@ export function AiAccessPage({ user, onError }: { user: User; onError: (e: unkno
   );
 
   return (
-    <div className="cards">
+    <>
       <section className="card card--wide">
         <header>
           <h2>KI-Zugang (MCP)</h2>
@@ -137,6 +137,6 @@ export function AiAccessPage({ user, onError }: { user: User; onError: (e: unkno
           Foyer.“ Die Antwort enthält einen Vorschau-Link.
         </p>
       </section>
-    </div>
+    </>
   );
 }
