@@ -30,7 +30,7 @@ npm start                                       # http://127.0.0.1:8080/admin/
 
 Nach einem Update (`npm run build` und Server-Neustart) laden die Displays den neuen Player selbst, an der nächsten Foliengrenze. Nur Displays, die noch einen Player von vor dieser Funktion laufen haben, muss man einmal über „Neu laden“ anstoßen.
 
-Mit `test:seed --reset` beginnt man mit einer leeren lokalen Datenbank. Läuft auf Port 8080 schon etwas anderes, beide Befehle mit `FOYER_PORT=8088` aufrufen.
+Mit `test:seed --reset` beginnt man mit einer leeren lokalen Datenbank. `demo:seed` legt nur Demo-Channel, Demo-Folien und ein Display an, ohne Testkonten, und gibt die Player-URL aus. Läuft auf Port 8080 schon etwas anderes, beide Befehle mit `FOYER_PORT=8088` aufrufen.
 
 **Testkonten** (nur für lokale Tests; die Passwörter sind öffentlich, der Server warnt beim Start, solange sie existieren):
 
@@ -46,6 +46,8 @@ Für eine echte Installation stattdessen eigene Konten anlegen:
 npm run cli -w @foyer/server -- user:create vorname.nachname@schule.de "Vorname Nachname" admin
 ```
 
+Das Passwort (mindestens 12 Zeichen) fragt der Befehl ab. In Skripten kann es stattdessen in `FOYER_PASSWORD` stehen.
+
 Konfiguration über Umgebungsvariablen (siehe `apps/server/src/config.ts`):
 
 | Variable | Standard | Zweck |
@@ -56,6 +58,8 @@ Konfiguration über Umgebungsvariablen (siehe `apps/server/src/config.ts`):
 | `FOYER_PLAYER_NETWORKS` | private Netze | Netze, aus denen Displays zugreifen dürfen (CIDR, kommagetrennt) |
 | `FOYER_TRUSTED_PROXIES` | `127.0.0.1,::1` | Nur von diesen Adressen wird `X-Forwarded-For` beachtet |
 | `FOYER_TIMEZONE` / `FOYER_LOCALE` | `Europe/Berlin` / `de-DE` | Zeitzone und Sprache |
+| `FOYER_INSECURE_COOKIES` | – | `1` schaltet das `Secure`-Flag der Anmelde-Cookies ab. Nur für Tests über reines http im LAN; https und `http://localhost` brauchen das nicht. |
+| `FOYER_QUIET` | – | `1` schaltet das Anfrage-Log auf der Konsole ab |
 | `FOYER_MEDIA_MAX_MB` | `2048` | Größte erlaubte Upload-Datei |
 | `FOYER_FFMPEG` / `FOYER_FFPROBE` | `ffmpeg` / `ffprobe` | Pfade, falls nicht im `PATH` |
 | `FOYER_LIVE_GATEWAY` | – | Adresse des Live-Gateways, z. B. `http://127.0.0.1:8190`; ohne sie gibt es keine Live-Folien |
@@ -149,7 +153,14 @@ Unter **Medien → Aus Bilddatenbank** (auch im Auswahldialog einer Folie) sucht
 
 Alle Displays laufen auf der Uhr des Servers (`/api/player/…/time`, abgeglichen beim Start und alle 30 s). Welche Folie läuft, ergibt sich allein aus der Uhrzeit: Displays mit demselben Programm schalten gleichzeitig um, ein neu gestartetes Display steigt mitten in der laufenden Folie ein, Videos werden über die Abspielgeschwindigkeit an der Uhr gehalten.
 
-Eine **Wand** (Admin → Displays → „Wand anlegen“) ist ein Raster aus bis zu 4 × 4 Feldern, in das man vorhandene Displays legt. Channel und Kalender bekommt die Wand; die Displays darin zeigen jeweils ihren Ausschnitt eines großen Bildes und behalten ihre URL. Der Player lädt sich dafür als iframe in Wandgröße (die Folien passen ihr Layout an das Wandformat an, z. B. 32:9 oder 8:9) und zeigt nur sein Feld. Der Rahmenausgleich vergrößert das Bild um die Rahmen zwischen den Bildschirmen, damit Linien gerade durchlaufen. Ton spielt nur das Display oben links. Nimmt man ein Display aus der Wand, zeigt es wieder seinen eigenen Channel.
+Eine **Wand** (Admin → Displays → „Wand anlegen“) ist ein Raster aus bis zu 4 × 4 Feldern, in das man vorhandene Displays legt. Channel und Kalender bekommt die Wand; die Displays darin zeigen jeweils ihren Ausschnitt eines großen Bildes und behalten ihre URL. Der Player lädt sich dafür als iframe in Wandgröße (die Folien passen ihr Layout an das Wandformat an, z. B. 32:9 oder 8:9) und zeigt nur sein Feld. Der Rahmenausgleich vergrößert das Bild um die Rahmen zwischen den Bildschirmen, damit Linien gerade durchlaufen. Nimmt man ein Display aus der Wand, zeigt es wieder seinen eigenen Channel.
+
+Eine Wand hat zwei Modi:
+
+- **Großes Bild** (Standard): Alle Displays zeigen zusammen eine Folie, wie oben beschrieben.
+- **Stapel:** Jedes Display zeigt eine eigene Folie aus dem Channel der Wand. Beim Wechsel rutscht jede Folie ein Display weiter, in einer Spalte nach unten, sonst nach rechts. Display *k* (in Leserichtung, leere Felder zählen nicht) zeigt also die Folie, die das erste Display *k* Wechsel vorher hatte. Alle wechseln gleichzeitig auf der Server-Uhr. Folien mit eigenem Ende (z. B. Videos) schalten im Stapel nicht vorzeitig weiter.
+
+Ton spielt nur ein Display, sonst gibt es Echo: im großen Bild das Display oben links, im Stapel das erste. Dazu muss bei der Wand „Ton erlaubt“ an sein.
 
 **Testbilder** startet man im Admin mit „Testbild“ an einem Display oder einer Wand und schaltet sie von Hand durch: Gitter (Ausrichtung, Rahmenausgleich), Rand und Pixel (abgeschnittener Rand, Skalierung), Vollflächen in Weiß, Schwarz, Rot, Grün, Blau (Pixelfehler, gleiche Farbe aller Bildschirme), Farbbalken und Graustufen, Bewegung mit Serverzeit-Zähler (Synchronität per Handyfoto) und Info (Auflösung, Player-Version, Uhrabweichung). Nach 10 Minuten endet der Testmodus von selbst.
 
@@ -172,7 +183,7 @@ Die API-Quelle ([`slide-types/_untis/api.ts`](slide-types/_untis/api.ts)) baut d
 Tests:
 
 ```bash
-npm test                                         # Unit- und API-Tests (Sicherheitsregeln, Manifest, HTML-Folie, Untis, Bilddatenbanken)
+npm test                                         # Unit- und API-Tests (Sicherheitsregeln, Manifest, HTML-Folie, Untis, Bilddatenbanken, Wände, Live-Gateway)
 npm run typecheck
 node tests/e2e/player-smoke.ts <player-url>      # Player in echtem Chrome (braucht Google Chrome)
 node tests/e2e/untis-compare.ts <foyer-url> <wp-foyer-checkout> <out-dir>   # Untis-Folien alt gegen neu
