@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { api, can, type Channel, type Display, type User } from './api.ts';
 import { PlayerThumb } from './PlayerThumb.tsx';
 
@@ -40,18 +40,25 @@ function stateLabel(display: Display): string {
   }
 }
 
-interface CardProps {
-  display: Display;
+function StateBadge({ display }: { display: Display }) {
+  const hint = display.wall ? 'Online, wenn alle Displays der Wand verbunden sind.' : STATE[display.state].hint;
+  return (
+    <span className={`badge ${STATE[display.state].className}`} title={hint}>
+      {stateLabel(display)}
+    </span>
+  );
+}
+
+interface Shared {
   /** All displays (walls look up their screens, screens their wall). */
   displays: Display[];
   channels: Channel[];
   user: User;
   onChanged: () => void;
-  onReveal: (name: string, url: string) => void;
   onError: (e: unknown) => void;
 }
 
-function useCardActions(display: Display, onChanged: () => void, onError: (e: unknown) => void) {
+function useActions(display: Display, onChanged: () => void, onError: (e: unknown) => void) {
   const [saved, setSaved] = useState(false);
   const run = async (action: () => Promise<unknown>, confirmSaved = false) => {
     try {
@@ -92,9 +99,154 @@ function TestPatternControls({ display, run }: { display: Display; run: (action:
   );
 }
 
-function DisplayCard({ display, displays, channels, user, onChanged, onReveal, onError }: CardProps) {
-  const { saved, run, patch } = useCardActions(display, onChanged, onError);
+/** Live miniature of what the display shows; a screen in a wall shows its part of the wall. */
+function DisplayThumb({ display, displays }: { display: Display; displays: Display[] }) {
+  const wall = display.wallId ? displays.find((d) => d.id === display.wallId) : undefined;
+  if (display.wall) {
+    return (
+      <PlayerThumb
+        src={`/p/preview-display/${display.id}`}
+        reloadKey={`${display.defaultChannelId}-${display.wall.rows}x${display.wall.cols}`}
+        orientation={display.orientation}
+        wall={{ rows: display.wall.rows, cols: display.wall.cols }}
+      />
+    );
+  }
+  if (wall?.wall) {
+    return (
+      <PlayerThumb
+        src={`/p/preview-display/${wall.id}`}
+        reloadKey={`${wall.defaultChannelId}-${wall.wall.rows}x${wall.wall.cols}`}
+        orientation={wall.orientation}
+        wall={{ rows: wall.wall.rows, cols: wall.wall.cols, row: display.wallRow ?? 0, col: display.wallCol ?? 0 }}
+      />
+    );
+  }
+  return <PlayerThumb src={`/p/preview-display/${display.id}`} reloadKey={display.defaultChannelId ?? ''} orientation={display.orientation} />;
+}
+
+function DisplayCard({ display, displays, channels, user, onEdit, onChanged, onError }: Shared & { display: Display; onEdit: () => void }) {
+  const { saved, run } = useActions(display, onChanged, onError);
   const channel = channels.find((c) => c.id === display.defaultChannelId);
+  const wall = display.wallId ? displays.find((d) => d.id === display.wallId) : undefined;
+  const screens = display.wall ? displays.filter((d) => d.wallId === display.id) : [];
+  const editor = can(user, 'editor');
+  const remove = () =>
+    confirm(
+      display.wall
+        ? `Wand „${display.name}“ löschen? Ihre Displays zeigen danach wieder ihren eigenen Channel.`
+        : `Display „${display.name}“ löschen?`,
+    ) && run(() => api.del(`/displays/${display.id}`));
+
+  return (
+    <article className="card display-card">
+      <button className="display-card__thumb" onClick={onEdit} disabled={!editor} aria-label={`„${display.name}“ bearbeiten`}>
+        <DisplayThumb display={display} displays={displays} />
+      </button>
+      <h2>
+        {editor ? (
+          <button className="display-card__title" onClick={onEdit}>{display.name}</button>
+        ) : (
+          display.name
+        )}
+      </h2>
+      <dl className="display-card__info">
+        {display.wall && (
+          <>
+            <dt>Wand:</dt>
+            <dd>
+              {display.wall.rows} × {display.wall.cols}
+              {screens.length ? ` · ${screens.map((d) => d.name).join(', ')}` : ''}
+            </dd>
+          </>
+        )}
+        {wall ? (
+          <>
+            <dt>Teil der Wand:</dt>
+            <dd>
+              {wall.name} (Zeile {(display.wallRow ?? 0) + 1}, Spalte {(display.wallCol ?? 0) + 1})
+            </dd>
+          </>
+        ) : (
+          <>
+            <dt>Standard-Channel:</dt>
+            <dd>{channel ? channel.name : <span className="muted">Keiner</span>}</dd>
+          </>
+        )}
+        <dt>Zeigt gerade:</dt>
+        <dd>{display.currentSlideTitle ?? <span className="muted">–</span>}</dd>
+        <dt>Status:</dt>
+        <dd>
+          <StateBadge display={display} />
+        </dd>
+        {!display.wall && (
+          <>
+            <dt>Zuletzt gesehen:</dt>
+            <dd>{display.state === 'online' ? 'jetzt' : display.lastSeenAt ? since(display.lastSeenAt) : <span className="muted">nie</span>}</dd>
+          </>
+        )}
+      </dl>
+      {display.status?.errors?.length ? <p className="error">{display.status.errors.join(' · ')}</p> : null}
+
+      {editor && (
+        <div className="row display-card__actions">
+          <button className="primary" onClick={onEdit}>Bearbeiten</button>
+          <button
+            onClick={() => window.open(`/p/preview-display/${display.id}`, '_blank', 'noopener')}
+            title="Zeigt den Plan des Displays in einem neuen Tab"
+          >
+            Vorschau
+          </button>
+          <button
+            onClick={() => run(() => api.post(`/displays/${display.id}/identify`))}
+            title={display.wall ? 'Zeigt auf jedem Bildschirm 10 s seinen Namen und sein Feld' : 'Zeigt den Namen 10 s groß auf dem Bildschirm'}
+          >
+            Identifizieren
+          </button>
+          <button onClick={() => run(() => api.post(`/displays/${display.id}/reload`))}>Neu laden</button>
+          <TestPatternControls display={display} run={run} />
+          {can(user, 'admin') && (
+            <button className="danger" onClick={remove}>Löschen</button>
+          )}
+          {saved && <span className="saved">Gespeichert ✓</span>}
+        </div>
+      )}
+    </article>
+  );
+}
+
+function ChannelSelect({ display, channels, patch }: { display: Display; channels: Channel[]; patch: (body: Record<string, unknown>) => unknown }) {
+  return (
+    <label className="field">
+      <span>Standard-Channel</span>
+      <select value={display.defaultChannelId ?? ''} onChange={(e) => patch({ defaultChannelId: e.target.value || null })}>
+        <option value="">– keiner –</option>
+        {channels.map((c) => (
+          <option key={c.id} value={c.id}>{c.name}</option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function NameField({ display, patch }: { display: Display; patch: (body: Record<string, unknown>) => unknown }) {
+  return (
+    <label className="field">
+      <span>Name</span>
+      <input
+        key={display.name}
+        defaultValue={display.name}
+        onBlur={(e) => {
+          const name = e.target.value.trim();
+          if (name && name !== display.name) patch({ name });
+        }}
+      />
+    </label>
+  );
+}
+
+function ScreenSettings({ display, displays, channels, user, onChanged, onReveal, onError }: Shared & { display: Display; onReveal: (name: string, url: string) => void }) {
+  const { saved, run, patch } = useActions(display, onChanged, onError);
   const wall = display.wallId ? displays.find((d) => d.id === display.wallId) : undefined;
   const playerUrl = (path: string) => `${location.origin}${path}`;
 
@@ -112,115 +264,62 @@ function DisplayCard({ display, displays, channels, user, onChanged, onReveal, o
   const release = () =>
     confirm(`Gerät ${display.device?.ip ?? ''} von „${display.name}“ trennen? Ein anderes Gerät kann das Display dann übernehmen.`) &&
     run(() => api.post(`/displays/${display.id}/release`));
-  const remove = () => confirm(`Display „${display.name}“ löschen?`) && run(() => api.del(`/displays/${display.id}`));
 
   return (
-    <article className="card display-card">
-      {wall?.wall ? (
-        <PlayerThumb
-          src={`/p/preview-display/${wall.id}`}
-          reloadKey={`${wall.defaultChannelId}-${wall.wall.rows}x${wall.wall.cols}`}
-          orientation={wall.orientation}
-          wall={{ rows: wall.wall.rows, cols: wall.wall.cols, row: display.wallRow ?? 0, col: display.wallCol ?? 0 }}
-        />
-      ) : (
-        <PlayerThumb src={`/p/preview-display/${display.id}`} reloadKey={display.defaultChannelId ?? ''} orientation={display.orientation} />
-      )}
-      <header>
-        <h2>{display.name}</h2>
-        <span className={`badge ${STATE[display.state].className}`} title={STATE[display.state].hint}>
-          {stateLabel(display)}
-        </span>
-      </header>
-      <p className="muted display-card__meta">
-        {wall
-          ? `Teil der Wand „${wall.name}“ (Zeile ${(display.wallRow ?? 0) + 1}, Spalte ${(display.wallCol ?? 0) + 1})`
-          : channel
-            ? `Channel: ${channel.name}`
-            : 'Kein Channel zugewiesen'}
-        {display.currentSlideTitle ? ` · zeigt gerade: ${display.currentSlideTitle}` : ''}
-      </p>
-      {display.status?.errors?.length ? <p className="error">{display.status.errors.join(' · ')}</p> : null}
-
-      {can(user, 'editor') && (
-        <div className="row display-card__actions">
-          <button onClick={() => run(() => api.post(`/displays/${display.id}/identify`))} title="Zeigt den Namen 10 s groß auf dem Bildschirm">
-            Identifizieren
-          </button>
-          <button onClick={() => run(() => api.post(`/displays/${display.id}/reload`))}>Neu laden</button>
-          <TestPatternControls display={display} run={run} />
-          {saved && <span className="saved">Gespeichert ✓</span>}
-        </div>
-      )}
-
-      {can(user, 'editor') && (
-        <details className="settings">
-          <summary>Einstellungen</summary>
-          <div className="form">
-            {wall && <p className="muted">Solange das Display Teil der Wand ist, zeigt es deren Inhalt. Channel und Kalender gelten wieder, sobald es die Wand verlässt.</p>}
-            <label className="field">
-              <span>Standard-Channel</span>
-              <select value={display.defaultChannelId ?? ''} onChange={(e) => patch({ defaultChannelId: e.target.value || null })}>
-                <option value="">– keiner –</option>
-                {channels.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              <span>Ausrichtung</span>
-              <select value={display.orientation} onChange={(e) => patch({ orientation: e.target.value as Display['orientation'] })}>
-                <option value="landscape">Querformat (16:9)</option>
-                <option value="portrait">Hochformat (9:16)</option>
-              </select>
-            </label>
-            <label className="field field--check">
-              <input type="checkbox" checked={display.showProgress} onChange={(e) => patch({ showProgress: e.target.checked })} />
-              Fortschrittsbalken
-            </label>
-            <label className="field field--check">
-              <input type="checkbox" checked={display.soundAllowed} onChange={(e) => patch({ soundAllowed: e.target.checked })} />
-              Ton erlaubt (Videofolien mit „Mit Ton“ spielen hier hörbar)
-            </label>
-            {can(user, 'admin') && (
-              <>
-                <label className="field">
-                  <span>Erlaubte Netze (CIDR, leer = globale Einstellung)</span>
-                  <input
-                    defaultValue={display.networks}
-                    placeholder="z. B. 10.20.0.0/16"
-                    onBlur={(e) => e.target.value !== display.networks && patch({ networks: e.target.value })}
-                  />
-                </label>
-                <p className="muted">
-                  {display.device ? `Gerät ${display.device.ip}, verbunden seit ${since(display.device.since)}` : 'Kein Gerät verbunden'}
-                  {display.status?.screen ? ` · Bildschirm ${display.status.screen}` : ''}
-                </p>
-                <div className="row">
-                  {display.device && (
-                    <button onClick={release} title="Trennt das aktuelle Gerät für 2 Minuten, damit ein anderes das Display übernehmen kann">
-                      Gerät freigeben
-                    </button>
-                  )}
-                  <button onClick={reveal}>URL anzeigen</button>
-                  <button onClick={rotate}>Neue URL</button>
-                  <button className="danger" onClick={remove}>Löschen</button>
-                </div>
-              </>
+    <div className="form">
+      <NameField display={display} patch={patch} />
+      {wall && <p className="muted">Solange das Display Teil der Wand „{wall.name}“ ist, zeigt es deren Inhalt. Channel und Kalender gelten wieder, sobald es die Wand verlässt.</p>}
+      <ChannelSelect display={display} channels={channels} patch={patch} />
+      <label className="field">
+        <span>Ausrichtung</span>
+        <select value={display.orientation} onChange={(e) => patch({ orientation: e.target.value as Display['orientation'] })}>
+          <option value="landscape">Querformat (16:9)</option>
+          <option value="portrait">Hochformat (9:16)</option>
+        </select>
+      </label>
+      <label className="field field--check">
+        <input type="checkbox" checked={display.showProgress} onChange={(e) => patch({ showProgress: e.target.checked })} />
+        Fortschrittsbalken
+      </label>
+      <label className="field field--check">
+        <input type="checkbox" checked={display.soundAllowed} onChange={(e) => patch({ soundAllowed: e.target.checked })} />
+        Ton erlaubt (Videofolien mit „Mit Ton“ spielen hier hörbar)
+      </label>
+      {can(user, 'admin') && (
+        <>
+          <label className="field">
+            <span>Erlaubte Netze (CIDR, leer = globale Einstellung)</span>
+            <input
+              defaultValue={display.networks}
+              placeholder="z. B. 10.20.0.0/16"
+              onBlur={(e) => e.target.value !== display.networks && patch({ networks: e.target.value })}
+            />
+          </label>
+          <p className="muted">
+            {display.device ? `Gerät ${display.device.ip}, verbunden seit ${since(display.device.since)}` : 'Kein Gerät verbunden'}
+            {display.status?.screen ? ` · Bildschirm ${display.status.screen}` : ''}
+          </p>
+          <div className="row">
+            {display.device && (
+              <button onClick={release} title="Trennt das aktuelle Gerät für 2 Minuten, damit ein anderes das Display übernehmen kann">
+                Gerät freigeben
+              </button>
             )}
+            <button onClick={reveal}>URL anzeigen</button>
+            <button onClick={rotate}>Neue URL</button>
           </div>
-        </details>
+        </>
       )}
-    </article>
+      <p className="muted modal__hint">Änderungen werden sofort gespeichert. {saved && <span className="saved">Gespeichert ✓</span>}</p>
+    </div>
   );
 }
 
 const SIDES = [1, 2, 3, 4];
 
-function WallCard({ display, displays, channels, user, onChanged, onError }: Omit<CardProps, 'onReveal'>) {
-  const { saved, run, patch } = useCardActions(display, onChanged, onError);
+function WallSettings({ display, displays, channels, onChanged, onError }: Shared & { display: Display }) {
+  const { saved, run, patch } = useActions(display, onChanged, onError);
   const wall = display.wall!;
-  const channel = channels.find((c) => c.id === display.defaultChannelId);
   const screens = displays.filter((d) => d.wallId === display.id);
   // Displays that can go into a cell: free ones and those already in this wall.
   const candidates = displays.filter((d) => d.kind === 'screen' && (!d.wallId || d.wallId === display.id));
@@ -244,129 +343,146 @@ function WallCard({ display, displays, channels, user, onChanged, onError }: Omi
     if (outside.length && !confirm(`${outside.map((d) => `„${d.name}“`).join(', ')} liegt dann außerhalb und verlässt die Wand. Fortfahren?`)) return;
     return patch({ wallRows: rows, wallCols: cols });
   };
-  const remove = () =>
-    confirm(`Wand „${display.name}“ löschen? Ihre Displays zeigen danach wieder ihren eigenen Channel.`) && run(() => api.del(`/displays/${display.id}`));
 
   return (
-    <article className="card display-card wall-card">
-      <PlayerThumb
-        src={`/p/preview-display/${display.id}`}
-        reloadKey={`${display.defaultChannelId}-${wall.rows}x${wall.cols}`}
-        orientation={display.orientation}
-        wall={{ rows: wall.rows, cols: wall.cols }}
-      />
-      <header>
-        <h2>{display.name}</h2>
-        <span className={`badge ${STATE[display.state].className}`} title="Online, wenn alle Displays der Wand verbunden sind.">
-          {stateLabel(display)}
-        </span>
-      </header>
-      <p className="muted display-card__meta">
-        Wand {wall.rows} × {wall.cols} · {channel ? `Channel: ${channel.name}` : 'Kein Channel zugewiesen'}
-        {display.currentSlideTitle ? ` · zeigt gerade: ${display.currentSlideTitle}` : ''}
-      </p>
-
-      {can(user, 'editor') && (
-        <>
-          <div className="wall-grid" style={{ gridTemplateColumns: `repeat(${wall.cols}, 1fr)` }}>
-            {Array.from({ length: wall.rows * wall.cols }, (_, i) => {
-              const row = Math.floor(i / wall.cols);
-              const col = i % wall.cols;
-              const occupant = at(row, col);
-              return (
-                <label key={`${row}-${col}`} className={`wall-grid__cell${occupant ? '' : ' is-empty'}`}>
-                  <span className="muted">Zeile {row + 1}, Spalte {col + 1}</span>
-                  <select value={occupant?.id ?? ''} onChange={(e) => assign(row, col, e.target.value)}>
-                    <option value="">– frei –</option>
-                    {candidates.map((d) => (
-                      <option key={d.id} value={d.id}>{d.name}</option>
-                    ))}
-                  </select>
-                </label>
-              );
-            })}
-          </div>
-          <div className="row display-card__actions">
-            <button onClick={() => run(() => api.post(`/displays/${display.id}/identify`))} title="Zeigt auf jedem Bildschirm 10 s seinen Namen und sein Feld">
-              Identifizieren
-            </button>
-            <button onClick={() => run(() => api.post(`/displays/${display.id}/reload`))}>Neu laden</button>
-            <TestPatternControls display={display} run={run} />
-            {saved && <span className="saved">Gespeichert ✓</span>}
-          </div>
-          <details className="settings">
-            <summary>Einstellungen</summary>
-            <div className="form">
-              <div className="row row--fields">
-                <label className="field">
-                  <span>Zeilen</span>
-                  <select value={wall.rows} onChange={(e) => resize(Number(e.target.value), wall.cols)}>
-                    {SIDES.map((n) => (
-                      <option key={n} value={n}>{n}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className="field">
-                  <span>Spalten</span>
-                  <select value={wall.cols} onChange={(e) => resize(wall.rows, Number(e.target.value))}>
-                    {SIDES.map((n) => (
-                      <option key={n} value={n}>{n}</option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-              <label className="field">
-                <span>Standard-Channel</span>
-                <select value={display.defaultChannelId ?? ''} onChange={(e) => patch({ defaultChannelId: e.target.value || null })}>
-                  <option value="">– keiner –</option>
-                  {channels.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                <span>Bildschirme</span>
-                <select value={display.orientation} onChange={(e) => patch({ orientation: e.target.value })}>
-                  <option value="landscape">Querformat (16:9)</option>
-                  <option value="portrait">Hochformat (9:16)</option>
-                </select>
-              </label>
-              <label className="field">
-                <span>Rahmenausgleich in Pixeln (Abstand zwischen den Bildflächen)</span>
-                <input
-                  type="number"
-                  min={0}
-                  max={500}
-                  defaultValue={wall.bezel}
-                  onBlur={(e) => Number(e.target.value) !== wall.bezel && patch({ wallBezel: Math.max(0, Math.round(Number(e.target.value) || 0)) })}
-                />
-              </label>
-              <label className="field field--check">
-                <input type="checkbox" checked={display.showProgress} onChange={(e) => patch({ showProgress: e.target.checked })} />
-                Fortschrittsbalken
-              </label>
-              <label className="field field--check">
-                <input type="checkbox" checked={display.soundAllowed} onChange={(e) => patch({ soundAllowed: e.target.checked })} />
-                Ton erlaubt (spielt nur auf dem Display oben links, sonst gibt es Echo)
-              </label>
-              {can(user, 'admin') && (
-                <div className="row">
-                  <button className="danger" onClick={remove}>Wand löschen</button>
-                </div>
-              )}
-            </div>
-          </details>
-        </>
-      )}
-    </article>
+    <div className="form">
+      <NameField display={display} patch={patch} />
+      <div className="row row--fields">
+        <label className="field">
+          <span>Zeilen</span>
+          <select value={wall.rows} onChange={(e) => resize(Number(e.target.value), wall.cols)}>
+            {SIDES.map((n) => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          <span>Spalten</span>
+          <select value={wall.cols} onChange={(e) => resize(wall.rows, Number(e.target.value))}>
+            {SIDES.map((n) => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <div className="wall-grid" style={{ gridTemplateColumns: `repeat(${wall.cols}, 1fr)` }}>
+        {Array.from({ length: wall.rows * wall.cols }, (_, i) => {
+          const row = Math.floor(i / wall.cols);
+          const col = i % wall.cols;
+          const occupant = at(row, col);
+          return (
+            <label key={`${row}-${col}`} className={`wall-grid__cell${occupant ? '' : ' is-empty'}`}>
+              <span className="muted">Zeile {row + 1}, Spalte {col + 1}</span>
+              <select value={occupant?.id ?? ''} onChange={(e) => assign(row, col, e.target.value)}>
+                <option value="">– frei –</option>
+                {candidates.map((d) => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
+            </label>
+          );
+        })}
+      </div>
+      <ChannelSelect display={display} channels={channels} patch={patch} />
+      <label className="field">
+        <span>Bildschirme</span>
+        <select value={display.orientation} onChange={(e) => patch({ orientation: e.target.value })}>
+          <option value="landscape">Querformat (16:9)</option>
+          <option value="portrait">Hochformat (9:16)</option>
+        </select>
+      </label>
+      <label className="field">
+        <span>Rahmenausgleich in Pixeln (Abstand zwischen den Bildflächen)</span>
+        <input
+          type="number"
+          min={0}
+          max={500}
+          defaultValue={wall.bezel}
+          onBlur={(e) => Number(e.target.value) !== wall.bezel && patch({ wallBezel: Math.max(0, Math.round(Number(e.target.value) || 0)) })}
+        />
+      </label>
+      <label className="field field--check">
+        <input type="checkbox" checked={display.showProgress} onChange={(e) => patch({ showProgress: e.target.checked })} />
+        Fortschrittsbalken
+      </label>
+      <label className="field field--check">
+        <input type="checkbox" checked={display.soundAllowed} onChange={(e) => patch({ soundAllowed: e.target.checked })} />
+        Ton erlaubt (spielt nur auf dem Display oben links, sonst gibt es Echo)
+      </label>
+      <p className="muted modal__hint">Änderungen werden sofort gespeichert. {saved && <span className="saved">Gespeichert ✓</span>}</p>
+    </div>
   );
 }
+
+function useEscape(onClose: () => void) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    addEventListener('keydown', onKey);
+    return () => removeEventListener('keydown', onKey);
+  }, [onClose]);
+}
+
+function EditDialog({ display, notice, onClose, onReveal, ...shared }: Shared & { display: Display; notice: ReactNode; onClose: () => void; onReveal: (name: string, url: string) => void }) {
+  useEscape(onClose);
+  return (
+    <div className="modal" role="dialog" aria-modal="true" aria-label={`${display.name} bearbeiten`} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal__box display-dialog">
+        <header className="modal__head">
+          <h2>{display.wall ? 'Wand' : 'Display'} „{display.name}“</h2>
+          <StateBadge display={display} />
+          <span className="spacer" />
+          <button onClick={onClose}>Schließen</button>
+        </header>
+        {notice}
+        {/* No second live preview here: each one holds an event stream, and browsers allow only 6 connections per host without HTTP/2. */}
+        {display.wall ? <WallSettings display={display} {...shared} /> : <ScreenSettings display={display} onReveal={onReveal} {...shared} />}
+      </div>
+    </div>
+  );
+}
+
+function CreateDialog({ kind, onCreate, onClose }: { kind: Display['kind']; onCreate: (name: string) => Promise<void>; onClose: () => void }) {
+  const [name, setName] = useState('');
+  useEscape(onClose);
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    if (name.trim()) void onCreate(name.trim());
+  };
+  return (
+    <div className="modal" role="dialog" aria-modal="true" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <form className="modal__box" onSubmit={submit}>
+        <header className="modal__head">
+          <h2>{kind === 'wall' ? 'Neue Wand' : 'Neues Display'}</h2>
+          <button type="button" onClick={onClose}>Abbrechen</button>
+        </header>
+        <label className="field">
+          <span>Name</span>
+          <input autoFocus placeholder={kind === 'wall' ? 'z. B. Wand Foyer' : 'z. B. Aula'} value={name} onChange={(e) => setName(e.target.value)} />
+        </label>
+        {kind === 'wall' && <p className="muted">Größe, Displays und Channel legst du danach im Bearbeiten-Dialog fest.</p>}
+        <div className="row row--end">
+          <button className="primary" type="submit" disabled={!name.trim()}>Anlegen</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+const FILTERS = {
+  all: { label: 'Alle', test: () => true },
+  screen: { label: 'Displays', test: (d: Display) => d.kind === 'screen' },
+  wall: { label: 'Wände', test: (d: Display) => d.kind === 'wall' },
+  offline: { label: 'Nicht online', test: (d: Display) => d.state !== 'online' },
+} satisfies Record<string, { label: string; test: (d: Display) => boolean }>;
 
 export function Displays({ user, onError }: { user: User; onError: (e: unknown) => void }) {
   const [displays, setDisplays] = useState<Display[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [revealed, setRevealed] = useState<{ name: string; url: string } | null>(null);
-  const [name, setName] = useState('');
+  const [creating, setCreating] = useState<Display['kind'] | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<keyof typeof FILTERS>('all');
+  const [search, setSearch] = useState('');
 
   const load = () =>
     Promise.all([api.get<Display[]>('/displays'), api.get<Channel[]>('/channels')])
@@ -382,58 +498,79 @@ export function Displays({ user, onError }: { user: User; onError: (e: unknown) 
     return () => clearInterval(timer);
   }, []);
 
-  const create = async (kind: Display['kind']) => {
-    if (!name.trim()) return;
+  const create = async (name: string) => {
+    if (!creating) return;
     try {
-      const res = await api.post<{ playerPath?: string }>('/displays', { name, kind });
+      const res = await api.post<{ id: string; playerPath?: string }>('/displays', { name, kind: creating });
       if (res.playerPath) setRevealed({ name, url: `${location.origin}${res.playerPath}` });
-      setName('');
+      setCreating(null);
       await load();
+      // A new wall is empty; go straight on to choosing its size and displays.
+      if (creating === 'wall') setEditId(res.id);
     } catch (e) {
       onError(e);
     }
   };
 
+  const query = search.trim().toLowerCase();
+  // Walls first, then screens, each by name as the server sorts them.
+  const shown = [...displays]
+    .sort((a, b) => Number(b.kind === 'wall') - Number(a.kind === 'wall'))
+    .filter((d) => FILTERS[filter].test(d) && (!query || d.name.toLowerCase().includes(query)));
+  const editing = displays.find((d) => d.id === editId);
+  const shared = { displays, channels, user, onChanged: load, onError };
+  const reveal = (n: string, url: string) => setRevealed({ name: n, url });
+  const notice = revealed && (
+    <div className="notice">
+      <strong>Player-URL für „{revealed.name}“</strong>
+      <span>In Airtame Cloud als Website eintragen. Wer diese URL kennt, sieht aus dem Schulnetz die Inhalte des Displays, also nicht weitergeben.</span>
+      <code className="secret">{revealed.url}</code>
+      <button onClick={() => navigator.clipboard?.writeText(revealed.url)}>Kopieren</button>
+      <button onClick={() => setRevealed(null)}>Schließen</button>
+    </div>
+  );
+
   return (
     <section>
-      <h1>Displays</h1>
-      {revealed && (
-        <div className="notice">
-          <strong>Player-URL für „{revealed.name}“</strong>
-          <span>In Airtame Cloud als Website eintragen. Wer diese URL kennt, sieht aus dem Schulnetz die Inhalte des Displays, also nicht weitergeben.</span>
-          <code className="secret">{revealed.url}</code>
-          <button onClick={() => navigator.clipboard?.writeText(revealed.url)}>Kopieren</button>
-          <button onClick={() => setRevealed(null)}>Schließen</button>
-        </div>
-      )}
-      {can(user, 'admin') && (
-        <div className="row">
-          <input placeholder="Name, z. B. Aula" value={name} onChange={(e) => setName(e.target.value)} />
-          <button onClick={() => create('screen')}>Display anlegen</button>
-          <button onClick={() => create('wall')} title="Mehrere Displays zeigen zusammen ein großes Bild">
-            Wand anlegen
-          </button>
-        </div>
-      )}
-      <div className="cards">
-        {displays
-          .filter((display) => display.kind === 'wall')
-          .map((display) => (
-            <WallCard key={display.id} display={display} displays={displays} channels={channels} user={user} onChanged={load} onError={onError} />
+      <div className="page-head">
+        <h1>Displays</h1>
+        {can(user, 'admin') && (
+          <>
+            <button onClick={() => setCreating('screen')}>Neues Display hinzufügen</button>
+            <button onClick={() => setCreating('wall')} title="Mehrere Displays zeigen zusammen ein großes Bild">
+              Neue Wand
+            </button>
+          </>
+        )}
+      </div>
+      {!editing && notice}
+      <div className="toolbar">
+        <nav className="filters" aria-label="Filter">
+          {(Object.keys(FILTERS) as Array<keyof typeof FILTERS>).map((key, i) => (
+            <span key={key}>
+              {i > 0 && <span className="muted"> | </span>}
+              <button className={filter === key ? 'filter is-active' : 'filter'} onClick={() => setFilter(key)}>
+                {FILTERS[key].label}
+              </button>{' '}
+              <span className="muted">({displays.filter(FILTERS[key].test).length})</span>
+            </span>
           ))}
-        {displays.filter((display) => display.kind !== 'wall').map((display) => (
-          <DisplayCard
-            key={display.id}
-            display={display}
-            displays={displays}
-            channels={channels}
-            user={user}
-            onChanged={load}
-            onReveal={(n, url) => setRevealed({ name: n, url })}
-            onError={onError}
-          />
+        </nav>
+        <input type="search" placeholder="Displays durchsuchen" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <span className="spacer" />
+        <span className="muted">{shown.length === 1 ? '1 Eintrag' : `${shown.length} Einträge`}</span>
+      </div>
+      <div className="cards display-cards">
+        {shown.map((display) => (
+          <DisplayCard key={display.id} display={display} onEdit={() => setEditId(display.id)} {...shared} />
         ))}
       </div>
+      {!shown.length && <p className="muted">{displays.length ? 'Keine Displays gefunden.' : 'Noch keine Displays angelegt.'}</p>}
+      {editing && <EditDialog display={editing} notice={notice} onClose={() => {
+            setEditId(null);
+            setRevealed(null);
+          }} onReveal={reveal} {...shared} />}
+      {creating && <CreateDialog kind={creating} onCreate={create} onClose={() => setCreating(null)} />}
     </section>
   );
 }

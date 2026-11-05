@@ -2,6 +2,7 @@
 // scaled down, so thumbnails look exactly like the display. Iframes load
 // lazily, so long lists only render what is on screen.
 import { useEffect, useRef, useState } from 'react';
+import { relayPreviewEvents } from './previewEvents.ts';
 
 const SIZES = {
   landscape: { width: 1280, height: 720 },
@@ -46,6 +47,15 @@ export function PlayerThumb({ src, reloadKey = '', orientation = 'landscape', wa
     return () => observer.disconnect();
   }, [shown.width]);
 
+  // Live previews of a display get their events through the page's shared stream.
+  const frame = useRef<HTMLIFrameElement>(null);
+  const relayed = src.match(/^\/p\/preview-display\/([^/?]+)/)?.[1];
+  const loaded = scale > 0;
+  useEffect(() => {
+    if (!relayed || !frame.current) return;
+    return relayPreviewEvents(frame.current, relayed);
+  }, [relayed, loaded, src, reloadKey]);
+
   const offset = cell ? `translate(${-cell.col * screen.width * scale}px, ${-cell.row * screen.height * scale}px) ` : '';
   return (
     <div
@@ -57,8 +67,9 @@ export function PlayerThumb({ src, reloadKey = '', orientation = 'landscape', wa
     >
       {scale > 0 && (
         <iframe
+          ref={frame}
           key={`${src}-${reloadKey}`}
-          src={src}
+          src={relayed ? `${src}?relay` : src}
           loading="lazy"
           tabIndex={-1}
           title=""

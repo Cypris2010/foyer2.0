@@ -57,7 +57,7 @@ if (!endpoints) {
   /** active: holds the display; blocked: busy elsewhere, not allowed, or released. */
   let active = false;
   let pausedUntil = 0;
-  let source: EventSource | null = null;
+  let eventSource: EventSource | null = null;
 
   // Lets the admin's live preview follow this display.
   const reportNowPlaying = () => {
@@ -108,8 +108,8 @@ if (!endpoints) {
 
   const block = (message: string) => {
     active = false;
-    source?.close();
-    source = null;
+    eventSource?.close();
+    eventSource = null;
     ticker.clear();
     testPattern.show(null);
     notice(message);
@@ -178,9 +178,22 @@ if (!endpoints) {
   };
 
   const hasSse = typeof EventSource !== 'undefined';
+  // Admin thumbnails: the page around them holds one stream for all and passes the events on.
+  const relayed = endpoints.mode === 'live' && new URLSearchParams(location.search).has('relay');
+  let relay: EventTarget | null = null;
   function openEvents() {
-    if (!hasSse || !endpoints?.events || source) return;
-    source = new EventSource(endpoints.events);
+    let source: EventTarget;
+    if (relayed) {
+      if (relay) return;
+      source = relay = new EventTarget();
+      addEventListener('message', (event) => {
+        if (event.origin !== location.origin || event.source !== parent || event.data?.type !== 'foyer-event') return;
+        relay!.dispatchEvent(new MessageEvent(event.data.event, { data: JSON.stringify(event.data.data) }));
+      });
+    } else {
+      if (!hasSse || !endpoints?.events || eventSource) return;
+      source = eventSource = new EventSource(endpoints.events);
+    }
     source.addEventListener('manifest-changed', () => void refresh());
     // Reconnects are automatic; refresh afterwards in case events were missed.
     source.addEventListener('hello', () => void refresh());

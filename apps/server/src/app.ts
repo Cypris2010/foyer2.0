@@ -158,12 +158,21 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
   // Finished transcodes change what slides show: players fetch the manifest again.
   ctx.media.onReady = () => events.broadcast('manifest-changed');
 
-  /** initial: events a (re)connecting client must not miss, sent after "hello". */
-  const sseStream = (c: Context, key: string, initial: () => Array<{ event: string; data: unknown }> = () => []) =>
+  /**
+   * initial: events a (re)connecting client must not miss, sent after "hello".
+   * keys as an object (stream label → event key): one stream for several keys,
+   * every event carries its label as "key".
+   */
+  const sseStream = (c: Context, keys: string | Record<string, string>, initial: () => Array<{ event: string; data: unknown }> = () => []) =>
     streamSSE(c, async (stream) => {
-      const unsubscribe = events.subscribe(key, (event, data) => {
-        void stream.writeSSE({ event, data: JSON.stringify(data ?? {}) });
-      });
+      const labelled = typeof keys !== 'string';
+      const unsubscribes = Object.entries(labelled ? keys : { '': keys }).map(([label, key]) =>
+        events.subscribe(key, (event, data) => {
+          const payload = labelled ? { ...(data as object | undefined), key: label } : (data ?? {});
+          void stream.writeSSE({ event, data: JSON.stringify(payload) });
+        }),
+      );
+      const unsubscribe = () => unsubscribes.forEach((off) => off());
       stream.onAbort(unsubscribe);
       await stream.writeSSE({ event: 'hello', data: '{}' });
       for (const { event, data } of initial()) await stream.writeSSE({ event, data: JSON.stringify(data) });
@@ -338,6 +347,12 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
   });
 
   admin.get('/preview/displays/:id/events', (c) => sseStream(c, `watch:${c.req.param('id')}`));
+  // All live thumbnails of an admin page on one stream: without HTTP/2 a browser
+  // opens only 6 connections per host, and every open stream holds one.
+  admin.get('/preview/events', (c) => {
+    const ids = (c.req.query('displays') ?? '').split(',').filter((displayId) => /^[\w-]{1,64}$/.test(displayId)).slice(0, 200);
+    return sseStream(c, Object.fromEntries(ids.map((displayId) => [displayId, `watch:${displayId}`])));
+  });
 
   admin.post('/displays', adminOnly, async (c) => {
     const body = displayCreate.safeParse(await c.req.json().catch(() => null));
