@@ -2,7 +2,9 @@
 import { z } from 'zod';
 import type { BackgroundKind, MediaInfo } from '@foyer/slide-sdk';
 import type { AppContext } from './context.ts';
+import { mediaPlaceholderIds } from '@foyer/slide-sdk/runtime';
 import { creditText, mediaUrl, type MediaSource, type MediaVariant } from './media.ts';
+import { hmac } from './crypto.ts';
 
 /** Darkens the background so text on top stays readable, in percent. */
 const dim = z.number().int().min(0).max(80).default(0);
@@ -78,4 +80,22 @@ export function mediaFields(jsonSchema: unknown): Array<{ name: string; accept: 
   return Object.entries(properties)
     .filter(([, prop]) => prop.widget === 'media')
     .map(([name, prop]) => ({ name, accept: prop.accept ?? 'image' }));
+}
+
+/** Media ids a document slide (HTML) references with {{media:<id>}} in any text field. */
+export function placeholderMedia(config: Record<string, unknown>): string[] {
+  return [...new Set(Object.values(config).flatMap((value) => (typeof value === 'string' ? mediaPlaceholderIds(value) : [])))];
+}
+
+export const mediaFileSignature = (ctx: AppContext, file: string) => hmac(ctx.secret, `media-file:${file}`);
+
+/**
+ * URL for {{media:<id>}} in sandboxed documents. Signed, because the sandbox
+ * sends no login cookie: admin previews outside the school network need it.
+ */
+export function signedMediaUrl(ctx: AppContext, id: string): string | null {
+  const info = mediaInfo(ctx, id);
+  if (!info || info === 'pending') return null;
+  const file = info.url.slice('/media/'.length);
+  return `${info.url}?s=${mediaFileSignature(ctx, file)}`;
 }

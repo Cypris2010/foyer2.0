@@ -28,7 +28,9 @@ import { LeaseTable } from './leases.ts';
 import { registerScheduleRoutes } from './schedule-routes.ts';
 import { registerMediaRoutes } from './media-routes.ts';
 import { registerIntegrationRoutes, slideServerContext } from './integrations.ts';
-import { backgroundSchema, checkBackground, mediaFields } from './background.ts';
+import { backgroundSchema, checkBackground, mediaFields, mediaFileSignature, placeholderMedia, signedMediaUrl } from './background.ts';
+import { registerApiKeyRoutes } from './api-keys.ts';
+import { registerMcp } from './mcp.ts';
 
 type Env = AuthEnv;
 
@@ -648,6 +650,10 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
       if (!item) return c.json({ error: 'Die gewählte Datei gibt es nicht mehr' }, 400);
       if (item.kind !== field.accept) return c.json({ error: field.accept === 'video' ? 'Bitte ein Video wählen' : 'Bitte ein Bild wählen' }, 400);
     }
+    if (registry.get(d.type)!.server.document) {
+      const missing = placeholderMedia(config as Record<string, unknown>).filter((mediaId) => !ctx.media.get(mediaId));
+      if (missing.length) return c.json({ error: `Unbekanntes Medium in {{media:…}}: ${missing.join(', ')}` }, 400);
+    }
     const now = ctx.now();
     if (slideId) {
       const existing = db.prepare('SELECT type FROM slides WHERE id = ?').get(slideId) as { type: string } | undefined;
@@ -685,6 +691,7 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
   registerScheduleRoutes(admin, ctx, editor);
   registerMediaRoutes(admin, ctx, editor);
   registerIntegrationRoutes(admin, ctx, adminOnly);
+  registerApiKeyRoutes(admin, ctx);
 
   // Preview manifest for one slide (admin preview player at /p/preview/<slideId>).
   admin.get('/preview/slides/:id/manifest', async (c) => {
@@ -805,12 +812,16 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
   app.route('/api/player', player);
   // Mounted after the player routes: the admin middleware matches all of /api/*.
   app.route('/api', admin);
+  // AI assistants (MCP) with a personal API key; uses the admin API above.
+  registerMcp(app, ctx);
 
   // --- Media files --------------------------------------------------------------
   // Players (school networks) and logged-in admins only: uploads may show people.
-  // Names are content hashes, so responses are cached for good.
+  // Signed URLs come from HTML slide documents ({{media:<id>}}). Names are
+  // content hashes, so responses are cached for good.
   app.get('/media/:file', async (c) => {
-    if (!ipAllowed(c.get('clientIp'), ctx.playerNetworks) && !sessionUser(db, getCookie(c, SESSION_COOKIE))) {
+    const signed = safeEqual(c.req.query('s') ?? '', mediaFileSignature(ctx, c.req.param('file')));
+    if (!signed && !ipAllowed(c.get('clientIp'), ctx.playerNetworks) && !sessionUser(db, getCookie(c, SESSION_COOKIE))) {
       return c.text('Nicht erlaubt', 403);
     }
     return (await ctx.media.serve(c.req.param('file'), c.req.header('range'))) ?? c.notFound();
@@ -892,6 +903,7 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
       displayName: display?.name ?? '',
       locale: ctx.locale,
       timeZone: ctx.timeZone,
+      mediaUrl: (mediaId) => signedMediaUrl(ctx, mediaId),
     });
     c.header('Content-Security-Policy', doc.csp);
     c.header('Cache-Control', 'no-store');

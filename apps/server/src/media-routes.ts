@@ -45,9 +45,11 @@ const sourceError = (c: Context, err: unknown) => {
 /** Slides that reference a media item (background or a media field in the config). */
 export function mediaUsage(ctx: AppContext, mediaId: string): Array<{ id: string; title: string }> {
   const pattern = `%"${mediaId}"%`;
+  // {{media:<id>}} in HTML slides.
+  const placeholder = `%media:${mediaId}%`;
   return ctx.db
-    .prepare('SELECT id, title FROM slides WHERE background_json LIKE ? OR config_json LIKE ? ORDER BY title')
-    .all(pattern, pattern) as Array<{ id: string; title: string }>;
+    .prepare('SELECT id, title FROM slides WHERE background_json LIKE ? OR config_json LIKE ? OR config_json LIKE ? ORDER BY title')
+    .all(pattern, pattern, placeholder) as Array<{ id: string; title: string }>;
 }
 
 export function mediaOut(ctx: AppContext, row: MediaRow, usageCount?: number) {
@@ -88,7 +90,8 @@ export function registerMediaRoutes(admin: Hono<AuthEnv>, ctx: AppContext, edito
     ) as unknown as MediaRow[];
     // One pass over the slides instead of one query per item.
     const slides = db.prepare('SELECT background_json, config_json FROM slides').all() as Array<{ background_json: string | null; config_json: string }>;
-    const used = (id: string) => slides.filter((s) => (s.background_json ?? '').includes(`"${id}"`) || s.config_json.includes(`"${id}"`)).length;
+    const used = (id: string) =>
+      slides.filter((s) => (s.background_json ?? '').includes(`"${id}"`) || s.config_json.includes(`"${id}"`) || s.config_json.includes(`media:${id}`)).length;
     return c.json(rows.map((row) => mediaOut(ctx, row, used(row.id))));
   });
 

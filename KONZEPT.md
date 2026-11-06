@@ -295,6 +295,7 @@ Mit dieser Folie gestaltet man frei mit eigenem HTML, CSS und JS, inklusive CSS-
 - **Editor-Modus:** drei Felder HTML / CSS / JS (CodeMirror) mit Live-Vorschau in 16:9 und 9:16.
 - **Paket-Modus:** ZIP-Upload (`index.html` + Assets, relative Pfade). Der Server entpackt nach `/content/html/<sha256>/`, und die Assets landen im Manifest, damit der Player sie wie Medien vorlädt.
 - **Vorlagen** zum Kopieren, z. B. animierte Überschrift, Laufschrift, Countdown, Zahlen-Ticker, Logo-Reveal.
+- **Medien aus der Mediathek:** `{{media:<id>}}` in HTML, CSS und JS wird zur signierten Adresse der umgewandelten Datei (`/media/<datei>?s=…`); die CSP erlaubt dafür `img-src`/`media-src 'self'`.
 - **Platzhalter:** `{{date}}`, `{{time}}`, `{{display.name}}` und Werte aus dem Formular. Eigene Konfigurationsfelder lassen sich als kleines Schema an der Folie definieren, z. B. „Titel“ oder „Farbe“. Damit können Redakteure eine HTML-Vorlage befüllen, ohne Code anzufassen.
 
 **Isolation**
