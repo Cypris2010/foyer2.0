@@ -72,7 +72,7 @@ function UntisApiSettings({ onError }: { onError: (e: unknown) => void }) {
 
   if (!state) return null;
   return (
-    <section className="card">
+    <section className="card card--wide" id="settings-untis">
       <header>
         <h2>WebUntis-API</h2>
         <span className={state.keySet && state.url ? 'badge ok' : 'badge off'}>{state.keySet && state.url ? 'eingerichtet' : 'nicht eingerichtet'}</span>
@@ -82,25 +82,27 @@ function UntisApiSettings({ onError }: { onError: (e: unknown) => void }) {
         Verbindung. Der Schlüssel wird verschlüsselt gespeichert und nicht wieder angezeigt.
       </p>
       <form className="form" onSubmit={(e) => void save(e)}>
-        <label className="field">
-          <span>Adresse</span>
-          <input type="url" placeholder="https://webuntis-api.example.de" value={url} onChange={(e) => setUrl(e.target.value)} />
-        </label>
-        <label className="field">
-          <span>
-            API-Schlüssel
-            {state.keySet && ` (gespeichert: ${state.keyHint}; leer lassen, um ihn zu behalten)`}
-            {state.keyUnreadable && ' (gespeicherter Schlüssel nicht mehr lesbar, bitte neu eingeben)'}
-          </span>
-          <input
-            type="password"
-            autoComplete="off"
-            spellCheck={false}
-            placeholder={state.keySet ? '••••••••' : 'wu_…'}
-            value={key}
-            onChange={(e) => setKey(e.target.value)}
-          />
-        </label>
+        <div className="row row--fields">
+          <label className="field">
+            <span>Adresse</span>
+            <input type="url" placeholder="https://webuntis-api.example.de" value={url} onChange={(e) => setUrl(e.target.value)} />
+          </label>
+          <label className="field">
+            <span>
+              API-Schlüssel
+              {state.keySet && ` (gespeichert: ${state.keyHint}; leer lassen, um ihn zu behalten)`}
+              {state.keyUnreadable && ' (gespeicherter Schlüssel nicht mehr lesbar, bitte neu eingeben)'}
+            </span>
+            <input
+              type="password"
+              autoComplete="off"
+              spellCheck={false}
+              placeholder={state.keySet ? '••••••••' : 'wu_…'}
+              value={key}
+              onChange={(e) => setKey(e.target.value)}
+            />
+          </label>
+        </div>
         <div className="row">
           <button className="primary" type="submit">Speichern</button>
           <button type="button" disabled={!state.keySet || !state.url || testing} onClick={() => void runTest()}>
@@ -248,7 +250,7 @@ function MediaSourceSettings({ onError }: { onError: (e: unknown) => void }) {
   useEffect(() => void api.get<MediaSourceState[]>('/settings/media-sources').then(setSources, onError), []);
   if (!sources) return null;
   return (
-    <section className="card card--wide">
+    <section className="card card--wide" id="settings-media-sources">
       <header>
         <h2>Bilddatenbanken</h2>
       </header>
@@ -261,6 +263,59 @@ function MediaSourceSettings({ onError }: { onError: (e: unknown) => void }) {
         <MediaSourceCard key={source.id} source={source} onSaved={setSources} onError={onError} />
       ))}
     </section>
+  );
+}
+
+/** Sections of the settings page, in page order, for the sub menu. */
+const SECTIONS: Array<{ id: string; label: string; admin: boolean }> = [
+  { id: 'settings-untis', label: 'WebUntis-API', admin: true },
+  { id: 'settings-media-sources', label: 'Bilddatenbanken', admin: true },
+  { id: 'settings-ai', label: 'KI-Zugang', admin: false },
+];
+
+/** Sub menu below the main navigation; stays at the top while scrolling and marks the section in view. */
+export function SettingsNav({ user }: { user: User }) {
+  const sections = SECTIONS.filter((s) => !s.admin || can(user, 'admin'));
+  const [active, setActive] = useState(sections[0].id);
+
+  useEffect(() => {
+    const update = () => {
+      const top = (document.querySelector('.subnav')?.getBoundingClientRect().bottom ?? 0) + 24;
+      const atEnd = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
+      let current = sections[0].id;
+      for (const s of sections) {
+        const el = document.getElementById(s.id);
+        if (el && (atEnd || el.getBoundingClientRect().top <= top)) current = s.id;
+      }
+      setActive(current);
+    };
+    update();
+    // The cards load their data after mounting and change the page height.
+    const resize = new ResizeObserver(update);
+    resize.observe(document.body);
+    window.addEventListener('scroll', update, { passive: true });
+    return () => {
+      resize.disconnect();
+      window.removeEventListener('scroll', update);
+    };
+  }, [user.role]);
+
+  // Editors only see the AI access: nothing to choose from.
+  if (sections.length < 2) return null;
+  return (
+    <nav className="subnav" aria-label="Einstellungen">
+      {sections.map((s) => (
+        <button
+          key={s.id}
+          type="button"
+          className={active === s.id ? 'active' : ''}
+          aria-current={active === s.id ? 'location' : undefined}
+          onClick={() => document.getElementById(s.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+        >
+          {s.label}
+        </button>
+      ))}
+    </nav>
   );
 }
 

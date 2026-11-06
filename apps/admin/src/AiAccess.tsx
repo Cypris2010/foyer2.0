@@ -81,29 +81,29 @@ export function AiAccessSettings({ user, onError }: { user: User; onError: (e: u
   );
 
   return (
-    <>
-      <section className="card card--wide">
-        <header>
-          <h2>KI-Zugang (MCP)</h2>
-        </header>
-        <p className="muted">
-          Mit einem persönlichen Schlüssel kann ein KI-Assistent wie Claude Folien anlegen, die Mediathek und die Bilddatenbanken durchsuchen
-          und Folien einplanen. Er arbeitet dabei mit den Rechten deines Kontos ({user.role}); HTML-Folien also nur, wenn du Admin bist. Alle
-          Änderungen stehen wie sonst im Audit-Log. Behandle den Schlüssel wie ein Passwort.
-        </p>
-        <form className="row" onSubmit={create}>
-          <input value={name} maxLength={100} onChange={(e) => setName(e.target.value)} placeholder="Name, z. B. Claude auf meinem Laptop" aria-label="Name des Schlüssels" />
-          <button className="primary" type="submit" disabled={!name.trim()}>Neuen Schlüssel erzeugen</button>
-        </form>
-        {fresh && (
-          <div className="notice">
-            <strong>Neuer Schlüssel, wird nur jetzt angezeigt:</strong>
-            <code className="secret">{fresh}</code>
-            <button type="button" onClick={() => void navigator.clipboard.writeText(fresh)}>Kopieren</button>
-            <button type="button" onClick={() => setFresh(null)}>Ausblenden</button>
-          </div>
-        )}
-        {keys && keys.length > 0 && (
+    <section className="card card--wide" id="settings-ai">
+      <header>
+        <h2>KI-Zugang (MCP)</h2>
+      </header>
+      <p className="muted">
+        Mit einem persönlichen Schlüssel kann ein KI-Assistent wie Claude Folien anlegen, die Mediathek und die Bilddatenbanken durchsuchen
+        und Folien einplanen. Er arbeitet dabei mit den Rechten deines Kontos ({user.role}); HTML-Folien also nur, wenn du Admin bist. Alle
+        Änderungen stehen wie sonst im Audit-Log. Behandle den Schlüssel wie ein Passwort.
+      </p>
+      <form className="row" onSubmit={create}>
+        <input value={name} maxLength={100} onChange={(e) => setName(e.target.value)} placeholder="Name, z. B. Claude auf meinem Laptop" aria-label="Name des Schlüssels" />
+        <button className="primary" type="submit" disabled={!name.trim()}>Neuen Schlüssel erzeugen</button>
+      </form>
+      {fresh && (
+        <div className="notice">
+          <strong>Neuer Schlüssel, wird nur jetzt angezeigt:</strong>
+          <code className="secret">{fresh}</code>
+          <button type="button" onClick={() => void navigator.clipboard.writeText(fresh)}>Kopieren</button>
+          <button type="button" onClick={() => setFresh(null)}>Ausblenden</button>
+        </div>
+      )}
+      {keys && keys.length > 0 && (
+        <div className="table-scroll">
           <table className="table">
             <thead>
               <tr><th>Name</th><th>Schlüssel</th><th>Erzeugt</th><th>Zuletzt benutzt</th><th /></tr>
@@ -120,23 +120,19 @@ export function AiAccessSettings({ user, onError }: { user: User; onError: (e: u
               ))}
             </tbody>
           </table>
-        )}
-      </section>
+        </div>
+      )}
 
-      <section className="card card--wide">
-        <header>
-          <h2>Verbinden</h2>
-        </header>
-        <p className="muted">
-          Adresse: <code>{endpoint}</code>. {fresh ? 'Der neue Schlüssel ist unten schon eingesetzt.' : 'Für <SCHLÜSSEL> einen neuen Schlüssel erzeugen, dann steht er hier schon drin.'}
-        </p>
-        <Snippet label="Claude Code (Terminal)" text={`claude mcp add --transport http foyer ${endpoint} --header "Authorization: Bearer ${key}"`} />
-        <Snippet label="Claude Desktop (Einstellungen → Entwickler → Konfiguration bearbeiten, claude_desktop_config.json; braucht Node.js)" text={desktop} />
-        <p className="muted">
-          Danach z. B.: „Mach eine Folie zum Sommerfest am Freitag um 15 Uhr mit einem passenden Foto und zeig sie bis dahin jeden Tag im Channel
-          Foyer.“ Die Antwort enthält einen Vorschau-Link.
-        </p>
-      </section>
-    </>
+      <h3 className="card__section">Verbinden</h3>
+      <p className="muted">
+        Adresse: <code>{endpoint}</code>. {fresh ? 'Der neue Schlüssel ist unten schon eingesetzt.' : 'Für <SCHLÜSSEL> einen neuen Schlüssel erzeugen, dann steht er hier schon drin.'}
+      </p>
+      <Snippet label="Claude Code (Terminal)" text={`claude mcp add --transport http foyer ${endpoint} --header "Authorization: Bearer ${key}"`} />
+      <Snippet label="Claude Desktop (Einstellungen → Entwickler → Konfiguration bearbeiten, claude_desktop_config.json; braucht Node.js)" text={desktop} />
+      <p className="muted">
+        Danach z. B.: „Mach eine Folie zum Sommerfest am Freitag um 15 Uhr mit einem passenden Foto und zeig sie bis dahin jeden Tag im Channel
+        Foyer.“ Die Antwort enthält einen Vorschau-Link.
+      </p>
+    </section>
   );
 }
