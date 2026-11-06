@@ -1,8 +1,9 @@
 // Settings: everyone manages their AI access (API keys); admins also the
-// connections to outside services (WebUntis-API, image databases).
+// users and the connections to outside services (WebUntis-API, image databases).
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, can, type User } from './api.ts';
 import { AiAccessSettings } from './AiAccess.tsx';
+import { UserSettings } from './Users.tsx';
 
 interface UntisApiState {
   url: string;
@@ -268,6 +269,7 @@ function MediaSourceSettings({ onError }: { onError: (e: unknown) => void }) {
 
 /** Sections of the settings page, in page order, for the sub menu. */
 const SECTIONS: Array<{ id: string; label: string; admin: boolean }> = [
+  { id: 'settings-users', label: 'Benutzer', admin: true },
   { id: 'settings-untis', label: 'WebUntis-API', admin: true },
   { id: 'settings-media-sources', label: 'Bilddatenbanken', admin: true },
   { id: 'settings-ai', label: 'KI-Zugang', admin: false },
@@ -324,6 +326,7 @@ export function SettingsPage({ user, onError }: { user: User; onError: (e: unkno
     <div className="cards">
       {can(user, 'admin') && (
         <>
+          <UserSettings user={user} onError={onError} />
           <UntisApiSettings onError={onError} />
           <MediaSourceSettings onError={onError} />
         </>
