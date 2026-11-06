@@ -92,7 +92,7 @@ describe('HTML-Folie', () => {
 
   it('erlaubt externe Ressourcen nur auf Wunsch', () => {
     const config = htmlConfig.parse({ allowExternal: true });
-    expect(buildDocument(config, { locale: 'de-DE', timeZone: 'Europe/Berlin', displayName: '' }).csp).toContain('img-src data: blob: https:');
+    expect(buildDocument(config, { locale: 'de-DE', timeZone: 'Europe/Berlin', displayName: '' }).csp).toContain("img-src 'self' data: blob: https:");
   });
 });
 
