@@ -98,7 +98,10 @@ export function App() {
     <div className="app">
       <header className="topbar" ref={topbar}>
         <nav className="nav">
-          <strong>Foyer 2.0</strong>
+          <strong className="nav__brand">
+            <img src={iconUrl} alt="" width={24} height={24} />
+            Foyer 2.0
+          </strong>
           {/* Phones: the page name and a button that folds the menu out. */}
           <button
             type="button"
