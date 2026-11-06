@@ -370,3 +370,69 @@ describe('Live-Vorschau', () => {
     expect(text).toMatch(/event: now-playing\ndata: \{[^\n]*"slideId":"s-html"[^\n]*"key":"d1"\}/);
   });
 });
+
+describe('Benutzerverwaltung', () => {
+  it('nur Admins verwalten Benutzer', async () => {
+    const { app, loginAs } = await setup();
+    const editor = await loginAs('editor');
+    expect((await app.request('/api/users', { headers: { cookie: editor } })).status).toBe(403);
+    expect((await app.request('/api/users/viewer', json('PATCH', { role: 'admin' }, editor))).status).toBe(403);
+  });
+
+  it('legt an, ändert Rolle und setzt das Passwort zurück', async () => {
+    const { app, db, loginAs } = await setup();
+    const admin = await loginAs('admin');
+    const created = await app.request('/api/users', json('POST', { email: 'neu@schule.de', name: 'Neu', role: 'viewer', password: PASSWORD }, admin));
+    expect(created.status).toBe(201);
+    const { id } = await created.json();
+    expect((await app.request('/api/users', json('POST', { email: 'NEU@schule.de', name: 'X', role: 'viewer', password: PASSWORD }, admin))).status).toBe(409);
+
+    const viewer = await loginAs('viewer');
+    const res = await app.request('/api/users/viewer', json('PATCH', { role: 'editor', password: 'ein-neues-passwort' }, admin));
+    expect(res.status).toBe(200);
+    expect((await res.json()).role).toBe('editor');
+    // The reset signs the user out everywhere.
+    expect((await app.request('/api/slides', { headers: { cookie: viewer } })).status).toBe(401);
+    const login = await app.request('/api/auth/login', json('POST', { email: 'viewer@schule.de', password: 'ein-neues-passwort' }));
+    expect((await login.json()).user.role).toBe('editor');
+
+    const list = await (await app.request('/api/users', { headers: { cookie: admin } })).json();
+    expect(list.map((u: { email: string }) => u.email)).toContain('neu@schule.de');
+    expect(list[0]).not.toHaveProperty('password_hash');
+    expect(db.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE entity = 'user' AND action = 'update'").get()).toEqual({ n: 1 });
+    expect(id).toBeTruthy();
+  });
+
+  it('Admins können die eigene Rolle nicht ändern und sich nicht löschen', async () => {
+    const { app, loginAs } = await setup();
+    const admin = await loginAs('admin');
+    expect((await app.request('/api/users/admin', json('PATCH', { role: 'viewer' }, admin))).status).toBe(400);
+    expect((await app.request('/api/users/admin', json('PATCH', { name: 'Chefin' }, admin))).status).toBe(200);
+    expect((await app.request('/api/users/admin', json('DELETE', {}, admin))).status).toBe(400);
+  });
+
+  it('entsperrt ein Konto nach zu vielen Fehlversuchen', async () => {
+    const { app, loginAs } = await setup();
+    const admin = await loginAs('admin');
+    for (let i = 0; i < 10; i++) {
+      await app.request('/api/auth/login', json('POST', { email: 'editor@schule.de', password: 'falsch' }, undefined));
+    }
+    let list = await (await app.request('/api/users', { headers: { cookie: admin } })).json();
+    expect(list.find((u: { id: string }) => u.id === 'editor').locked).toBe(true);
+    expect((await app.request('/api/users/editor', json('PATCH', { unlock: true }, admin))).status).toBe(200);
+    list = await (await app.request('/api/users', { headers: { cookie: admin } })).json();
+    expect(list.find((u: { id: string }) => u.id === 'editor').locked).toBe(false);
+  });
+
+  it('jeder ändert das eigene Passwort mit dem aktuellen', async () => {
+    const { app, loginAs } = await setup();
+    const first = await loginAs('viewer');
+    const second = await loginAs('viewer');
+    expect((await app.request('/api/account/password', json('PUT', { current: 'falsch', password: 'ein-neues-passwort' }, first))).status).toBe(400);
+    expect((await app.request('/api/account/password', json('PUT', { current: PASSWORD, password: 'kurz' }, first))).status).toBe(400);
+    expect((await app.request('/api/account/password', json('PUT', { current: PASSWORD, password: 'ein-neues-passwort' }, first))).status).toBe(200);
+    // This browser stays signed in, the other one is signed out.
+    expect((await app.request('/api/slides', { headers: { cookie: first } })).status).toBe(200);
+    expect((await app.request('/api/slides', { headers: { cookie: second } })).status).toBe(401);
+  });
+});

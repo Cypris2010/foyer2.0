@@ -21,7 +21,6 @@ import { TEST_PATTERNS, type TestPatternState } from '@foyer/slide-sdk/test-patt
 import { affectedDisplays, MAX_WALL_SIDE, setWallCells, trimWall, WallError, wallScreens } from './walls.ts';
 import { buildManifest, buildSlideEntry, dataSignature, documentSignature, DISPLAY_COLUMNS, liveSignature, slideData, type DisplayRow, type SlideRow } from './manifest.ts';
 import { parseConfig } from './registry.ts';
-import { hashPassword } from './crypto.ts';
 import { securityHeaders } from './headers.ts';
 import { displayState } from './status.ts';
 import { LeaseTable } from './leases.ts';
@@ -30,6 +29,7 @@ import { registerMediaRoutes } from './media-routes.ts';
 import { registerIntegrationRoutes, slideServerContext } from './integrations.ts';
 import { backgroundSchema, checkBackground, mediaFields, mediaFileSignature, placeholderMedia, signedMediaUrl } from './background.ts';
 import { registerApiKeyRoutes } from './api-keys.ts';
+import { registerUserRoutes } from './users.ts';
 import { registerMcp } from './mcp.ts';
 
 type Env = AuthEnv;
@@ -84,12 +84,6 @@ const slideBody = z.object({
   background: backgroundSchema,
   duration: z.number().int().min(1).max(86400).nullable().default(null),
   published: z.boolean().default(true),
-});
-const userCreate = z.object({
-  email: z.email().max(320),
-  name: z.string().min(1).max(200),
-  role: z.enum(['admin', 'editor', 'viewer']),
-  password: z.string().min(12).max(1000),
 });
 const nowPlayingBody = z.object({
   slideId: z.string().max(64).nullable(),
@@ -710,32 +704,8 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
     });
   });
 
-  // Users
-  admin.get('/users', adminOnly, (c) => c.json(db.prepare('SELECT id, email, name, role, created_at FROM users ORDER BY email').all()));
-
-  admin.post('/users', adminOnly, async (c) => {
-    const body = userCreate.safeParse(await c.req.json().catch(() => null));
-    if (!body.success) return badRequest(c, body.error);
-    const userId = id();
-    try {
-      db.prepare('INSERT INTO users (id, email, name, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(
-        userId, body.data.email, body.data.name, await hashPassword(body.data.password), body.data.role, ctx.now(),
-      );
-    } catch {
-      return c.json({ error: 'E-Mail bereits vergeben' }, 409);
-    }
-    audit(db, c.get('user').id, 'create', 'user', userId, { email: body.data.email, role: body.data.role });
-    return c.json({ id: userId }, 201);
-  });
-
-  admin.delete('/users/:id', adminOnly, (c) => {
-    if (c.req.param('id') === c.get('user').id) return c.json({ error: 'Eigenes Konto kann nicht gelöscht werden' }, 400);
-    const result = db.prepare('DELETE FROM users WHERE id = ?').run(c.req.param('id'));
-    if (!result.changes) return c.json({ error: 'Nicht gefunden' }, 404);
-    audit(db, c.get('user').id, 'delete', 'user', c.req.param('id'));
-    return c.json({ ok: true });
-  });
-
+  // Users and the own account
+  registerUserRoutes(admin, ctx);
 
   // --- Player API: token + network allowlist (KONZEPT 3.3) --------------------
 
