@@ -7,6 +7,7 @@ import { CalendarPage } from './CalendarPage.tsx';
 import { MediaPage } from './Media.tsx';
 import { SettingsNav, SettingsPage } from './Settings.tsx';
 import { ThemeSwitch } from './ThemeSwitch.tsx';
+import { ErrorToast, toastFor, type Toast } from './Toast.tsx';
 import iconUrl from '../../../assets/icon.svg';
 
 const pages = { displays: 'Displays', calendar: 'Kalender', channels: 'Channels', slides: 'Folien', media: 'Medien', settings: 'Einstellungen' } as const;
@@ -53,7 +54,7 @@ function Login({ onLogin }: { onLogin: (user: User) => void }) {
 export function App() {
   const [user, setUser] = useState<User | null | undefined>(undefined);
   const [page, setPage] = useState<Page>(currentPage());
-  const [error, setError] = useState('');
+  const [toast, setToast] = useState<Toast | null>(null);
 
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -84,7 +85,7 @@ export function App() {
 
   const onError = (err: unknown) => {
     if (err instanceof ApiError && err.status === 401) setUser(null);
-    setError((err as Error).message);
+    setToast(toastFor(err));
   };
 
   if (user === undefined) return null;
@@ -128,11 +129,7 @@ export function App() {
         </nav>
         {page === 'settings' && <SettingsNav user={user} />}
       </header>
-      {error && (
-        <div className="notice error" role="alert">
-          {error} <button onClick={() => setError('')}>×</button>
-        </div>
-      )}
+      {toast && <ErrorToast key={toast.id} toast={toast} onClose={() => setToast(null)} />}
       <main>
         {page === 'displays' && <Displays user={user} onError={onError} />}
         {page === 'calendar' && <CalendarPage user={user} onError={onError} />}

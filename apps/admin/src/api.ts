@@ -101,21 +101,38 @@ export interface SlideType {
 
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  /** No answer from Foyer itself (offline, server down); see unreachable(). */
+  unreachable: boolean;
+  constructor(status: number, message: string, unreachable = false) {
     super(message);
     this.status = status;
+    this.unreachable = unreachable;
   }
 }
 
+/** For requests Foyer never answered: browser offline, server down, or the proxy in front of it can't reach it. */
+function unreachable(): string {
+  return navigator.onLine
+    ? 'Der Foyer-Server ist gerade nicht erreichbar. Bitte in einem Moment erneut versuchen.'
+    : 'Keine Netzwerkverbindung. Bitte die Verbindung prüfen.';
+}
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`/api${path}`, {
-    method,
-    credentials: 'same-origin',
-    headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`/api${path}`, {
+      method,
+      credentials: 'same-origin',
+      headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  } catch {
+    throw new ApiError(0, unreachable(), true);
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
+    // A reverse proxy answers 502–504 with its own HTML page while the server is down.
+    if (data.error === undefined && res.status >= 502 && res.status <= 504) throw new ApiError(res.status, unreachable(), true);
     const issues = Array.isArray(data.issues) ? `: ${data.issues.map((i: any) => `${i.path?.join('.')} ${i.message}`).join(', ')}` : '';
     throw new ApiError(res.status, `${data.error ?? `HTTP ${res.status}`}${issues}`);
   }
@@ -229,7 +246,7 @@ export function uploadMedia(file: File, onProgress: (fraction: number) => void):
       if (xhr.status >= 200 && xhr.status < 300) resolve(data);
       else reject(new ApiError(xhr.status, data.error ?? `HTTP ${xhr.status}`));
     };
-    xhr.onerror = () => reject(new Error('Upload abgebrochen (Netzwerkfehler)'));
+    xhr.onerror = () => reject(new ApiError(0, `Upload abgebrochen. ${unreachable()}`, true));
     xhr.send(file);
   });
 }
