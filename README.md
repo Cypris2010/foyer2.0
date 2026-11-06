@@ -48,6 +48,8 @@ npm run cli -w @foyer/server -- user:create vorname.nachname@schule.de "Vorname 
 
 Das Passwort (mindestens 12 Zeichen) fragt der Befehl ab. In Skripten kann es stattdessen in `FOYER_PASSWORD` stehen.
 
+Das erste Admin-Konto legt man so an; alle weiteren verwaltet ein Admin im Admin unter **Einstellungen → Benutzer** (anlegen, Rolle ändern, Passwort zurücksetzen, nach zu vielen Fehlversuchen entsperren, löschen). Über den eigenen Namen oben rechts → **Mein Konto** ändert jeder sein eigenes Passwort.
+
 Konfiguration über Umgebungsvariablen (siehe `apps/server/src/config.ts`):
 
 | Variable | Standard | Zweck |

@@ -7,15 +7,19 @@ import { CalendarPage } from './CalendarPage.tsx';
 import { MediaPage } from './Media.tsx';
 import { SettingsNav, SettingsPage } from './Settings.tsx';
 import { ThemeSwitch } from './ThemeSwitch.tsx';
+import { AccountMenu } from './AccountMenu.tsx';
+import { AccountSettings } from './Users.tsx';
 import { ErrorToast, toastFor, type Toast } from './Toast.tsx';
 import iconUrl from '../../../assets/icon.svg';
 
 const pages = { displays: 'Displays', calendar: 'Kalender', channels: 'Channels', slides: 'Folien', media: 'Medien', settings: 'Einstellungen' } as const;
-type Page = keyof typeof pages;
+/** Reached from the menu behind the user's name, not from the main nav. */
+const titles = { ...pages, account: 'Mein Konto' } as const;
+type Page = keyof typeof titles;
 
 function currentPage(): Page {
   const hash = location.hash.replace('#', '');
-  return hash in pages ? (hash as Page) : 'displays';
+  return hash in titles ? (hash as Page) : 'displays';
 }
 
 function Login({ onLogin }: { onLogin: (user: User) => void }) {
@@ -112,19 +116,18 @@ export function App() {
             aria-controls="nav-menu"
             onClick={() => setMenuOpen(!menuOpen)}
           >
-            {pages[page]}
+            {titles[page]}
             <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true">
               {menuOpen ? <path d="M5 5l10 10M15 5L5 15" /> : <path d="M3 5h14M3 10h14M3 15h14" />}
             </svg>
           </button>
           <div className={menuOpen ? 'nav__menu nav__menu--open' : 'nav__menu'} id="nav-menu">
-            {(Object.keys(pages) as Page[]).map((p) => (
+            {(Object.keys(pages) as Array<keyof typeof pages>).map((p) => (
               <a key={p} href={`#${p}`} className={page === p ? 'active' : ''} aria-current={page === p ? 'page' : undefined}>{pages[p]}</a>
             ))}
             <span className="spacer" />
             <ThemeSwitch />
-            <span className="muted">{user.name} ({user.role})</span>
-            <button onClick={logout}>Abmelden</button>
+            <AccountMenu user={user} active={page === 'account'} onLogout={() => void logout()} />
           </div>
         </nav>
         {page === 'settings' && <SettingsNav user={user} />}
@@ -137,6 +140,11 @@ export function App() {
         {page === 'slides' && <Slides user={user} onError={onError} />}
         {page === 'media' && <MediaPage user={user} onError={onError} />}
         {page === 'settings' && <SettingsPage user={user} onError={onError} />}
+        {page === 'account' && (
+          <div className="cards">
+            <AccountSettings user={user} onError={onError} />
+          </div>
+        )}
       </main>
     </div>
   );
