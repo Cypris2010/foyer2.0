@@ -6,6 +6,7 @@ import { Slides } from './Slides.tsx';
 import { CalendarPage } from './CalendarPage.tsx';
 import { MediaPage } from './Media.tsx';
 import { SettingsNav, SettingsPage } from './Settings.tsx';
+import iconUrl from '../../../assets/icon.svg';
 
 const pages = { displays: 'Displays', calendar: 'Kalender', channels: 'Channels', slides: 'Folien', media: 'Medien', settings: 'Einstellungen' } as const;
 type Page = keyof typeof pages;
@@ -30,7 +31,10 @@ function Login({ onLogin }: { onLogin: (user: User) => void }) {
   };
   return (
     <form className="login" onSubmit={submit}>
-      <h1>Foyer</h1>
+      <div className="login__brand">
+        <img src={iconUrl} alt="" width={72} height={72} />
+        <h1>Foyer 2.0</h1>
+      </div>
       <label className="field">
         <span>E-Mail</span>
         <input type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required />
@@ -94,7 +98,10 @@ export function App() {
     <div className="app">
       <header className="topbar" ref={topbar}>
         <nav className="nav">
-          <strong>Foyer</strong>
+          <strong className="nav__brand">
+            <img src={iconUrl} alt="" width={24} height={24} />
+            Foyer 2.0
+          </strong>
           {/* Phones: the page name and a button that folds the menu out. */}
           <button
             type="button"
