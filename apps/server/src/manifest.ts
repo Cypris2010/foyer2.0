@@ -3,7 +3,7 @@ import type { AppContext } from './context.ts';
 import { hmac, sha256 } from './crypto.ts';
 import { slideServerContext } from './integrations.ts';
 import { activeChannelSlides, displayContent, minTime } from './planning.ts';
-import { mediaCredit, mediaFields, mediaInfo, resolveBackground, type ManifestBackground } from './background.ts';
+import { mediaCredit, mediaFields, mediaInfo, placeholderMedia, resolveBackground, type ManifestBackground } from './background.ts';
 import type { MediaInfo } from '@foyer/slide-sdk';
 import { wallScreens } from './walls.ts';
 
@@ -245,6 +245,16 @@ export async function buildSlideEntry(
     if (info === 'pending') return null;
     if (!info) {
       result.error = 'Die gewählte Datei fehlt oder konnte nicht umgewandelt werden';
+      return result;
+    }
+    result.media[id] = info;
+  }
+  // {{media:<id>}} in documents (HTML): the same rules, and their credits show too.
+  for (const id of entry.server.document ? placeholderMedia(config) : []) {
+    const info = mediaInfo(ctx, id);
+    if (info === 'pending') return null;
+    if (!info) {
+      result.error = `Medium ${id} fehlt oder konnte nicht umgewandelt werden`;
       return result;
     }
     result.media[id] = info;

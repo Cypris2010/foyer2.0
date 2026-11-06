@@ -84,6 +84,8 @@ export interface SlideDocument {
 // Documents are served to browsers: no service credentials.
 export interface DocumentContext extends Omit<ServerContext, 'untisApi'> {
   displayName: string;
+  /** URL of a media library file for {{media:<id>}}; null when it is missing or not ready. */
+  mediaUrl?: (id: string) => string | null;
 }
 
 export interface SlideServer<C = unknown, D = unknown> {

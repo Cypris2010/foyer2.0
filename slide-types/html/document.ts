@@ -1,7 +1,7 @@
 // Builds the sandboxed document for an HTML slide. The server serves it with
 // the returned CSP as a header; srcdoc is not used because it would inherit
 // the player's (strict) CSP.
-import { fillPlaceholders, type PlaceholderContext } from '@foyer/slide-sdk/runtime';
+import { fillMediaPlaceholders, fillPlaceholders, type PlaceholderContext } from '@foyer/slide-sdk/runtime';
 import type { SlideDocument } from '@foyer/slide-sdk';
 import type { HtmlConfig } from './index.ts';
 
@@ -56,8 +56,9 @@ export function buildCsp(allowExternal: boolean): string {
   const external = allowExternal ? ' https:' : '';
   return [
     "default-src 'none'",
-    `img-src data: blob:${external}`,
-    `media-src data: blob:${external}`,
+    // 'self': files from the media library ({{media:<id>}}, signed /media URLs).
+    `img-src 'self' data: blob:${external}`,
+    `media-src 'self' data: blob:${external}`,
     `font-src data:${external}`,
     `style-src 'unsafe-inline'${external}`,
     `script-src 'unsafe-inline'${external}`,
@@ -68,16 +69,17 @@ export function buildCsp(allowExternal: boolean): string {
   ].join('; ');
 }
 
-export function buildDocument(config: HtmlConfig, ctx: PlaceholderContext): SlideDocument {
+export function buildDocument(config: HtmlConfig, ctx: PlaceholderContext, mediaUrl: (id: string) => string | null = () => null): SlideDocument {
   const values = { ...parseVariables(config.variables), ...(ctx.values ?? {}) };
-  const html = fillPlaceholders(config.html, { ...ctx, values });
+  const media = (text: string) => fillMediaPlaceholders(text, mediaUrl);
+  const html = fillPlaceholders(media(config.html), { ...ctx, values });
   return {
     csp: buildCsp(config.allowExternal),
     html: `<!doctype html>
 <html><head><meta charset="utf-8">
 <style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent}</style>
-<style>${styleSafe(config.css)}</style>
+<style>${styleSafe(media(config.css))}</style>
 <script>${RUNTIME}</script>
-</head><body>${html}<script>${scriptSafe(config.js)}</script></body></html>`,
+</head><body>${html}<script>${scriptSafe(media(config.js))}</script></body></html>`,
   };
 }

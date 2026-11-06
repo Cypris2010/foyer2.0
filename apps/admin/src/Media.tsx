@@ -314,6 +314,14 @@ function MediaDetail({ id, user, onChanged, onClose, onError }: { id: string; us
             </tr>
           ))}
           <tr><th>{item.source ? 'Übernommen' : 'Hochgeladen'}</th><td>{new Date(item.createdAt).toLocaleString('de-DE')}</td></tr>
+          <tr>
+            <th>In HTML-Folien</th>
+            <td>
+              <code className="secret">{`{{media:${item.id}}}`}</code>{' '}
+              <button type="button" onClick={() => void navigator.clipboard.writeText(`{{media:${item.id}}}`)}>Kopieren</button>
+              <div className="muted">{item.kind === 'image' ? 'z. B. <img src="…"> oder background-image: url(…)' : 'z. B. <video src="…" autoplay muted loop>'}</div>
+            </td>
+          </tr>
         </tbody>
       </table>
       {item.source && <SourceInfo item={item} editable={editable} onCredit={setCredit} />}

@@ -1,5 +1,6 @@
 // Admin command line:
 //   user:create <email> <name> <role>   password from FOYER_PASSWORD or prompt
+//   apikey:create <email> [name]        personal API key, e.g. for an AI assistant (MCP)
 //   demo:seed                           demo channel, slides and display; prints the player URL
 //   test:seed [--reset]                 test accounts + demo content + two displays (local testing only)
 import { createInterface } from 'node:readline/promises';
@@ -10,6 +11,7 @@ import { config } from './config.ts';
 import { encrypt, hashPassword, randomToken, sha256 } from './crypto.ts';
 import { loadTokenKey } from './keys.ts';
 import { TEST_ACCOUNTS } from './test-accounts.ts';
+import { createApiKey } from './api-keys.ts';
 
 const [command, ...args] = process.argv.slice(2);
 
@@ -41,6 +43,17 @@ async function createUser() {
     crypto.randomUUID(), email, name, await hashPassword(password), role, Date.now(),
   );
   console.log(`Benutzer ${email} (${role}) angelegt.`);
+}
+
+function createKey() {
+  const [email, name = 'CLI'] = args;
+  if (!email) throw new Error('Aufruf: apikey:create <email> [name]');
+  const user = db.prepare('SELECT id FROM users WHERE email = ?').get(email) as { id: string } | undefined;
+  if (!user) throw new Error(`Kein Benutzer ${email}`);
+  const { key } = createApiKey(db, user.id, name);
+  console.log(`API-Schlüssel für ${email} („${name}“), wird nur jetzt angezeigt:`);
+  console.log(key);
+  console.log(`MCP-Adresse: <Foyer-Adresse>/mcp, Header „Authorization: Bearer <Schlüssel>“`);
 }
 
 const DEMO_HTML = `<div class="stage">
@@ -117,9 +130,10 @@ async function seedTest() {
 
 try {
   if (command === 'user:create') await createUser();
+  else if (command === 'apikey:create') createKey();
   else if (command === 'demo:seed') seedDemo();
   else if (command === 'test:seed') await seedTest();
-  else console.log('Befehle: user:create <email> <name> <role> | demo:seed | test:seed [--reset]');
+  else console.log('Befehle: user:create <email> <name> <role> | apikey:create <email> [name] | demo:seed | test:seed [--reset]');
 } catch (err) {
   console.error((err as Error).message);
   process.exitCode = 1;

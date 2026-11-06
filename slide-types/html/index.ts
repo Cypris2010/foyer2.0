@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { defineSlideType } from '@foyer/slide-sdk';
 
 export const config = z.object({
-  html: z.string().max(200_000).default('').describe('HTML').meta({ widget: 'code', language: 'html' }),
+  html: z.string().max(200_000).default('').describe('HTML (Medien aus der Mediathek mit {{media:ID}}, auch in CSS und JS)').meta({ widget: 'code', language: 'html' }),
   css: z.string().max(200_000).default('').describe('CSS').meta({ widget: 'code', language: 'css' }),
   js: z.string().max(200_000).default('').describe('JavaScript').meta({ widget: 'code', language: 'javascript' }),
   variables: z

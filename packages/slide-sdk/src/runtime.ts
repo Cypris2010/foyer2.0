@@ -32,6 +32,21 @@ export function fillPlaceholders(text: string, ctx: PlaceholderContext): string 
   });
 }
 
+/** "{{media:<id>}}": a file from the media library (HTML slides). */
+const MEDIA_PLACEHOLDER = /\{\{\s*media:([\w-]{1,64})\s*\}\}/g;
+
+/** Media ids referenced with {{media:<id>}}, in order, without duplicates. */
+export function mediaPlaceholderIds(text: string): string[] {
+  const ids: string[] = [];
+  for (const match of text.matchAll(MEDIA_PLACEHOLDER)) if (!ids.includes(match[1])) ids.push(match[1]);
+  return ids;
+}
+
+/** Replaces {{media:<id>}} with the file's URL; unknown ids become "". */
+export function fillMediaPlaceholders(text: string, url: (id: string) => string | null): string {
+  return text.replace(MEDIA_PLACEHOLDER, (_match, id: string) => url(id) ?? '');
+}
+
 export function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 }
