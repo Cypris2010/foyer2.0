@@ -3,7 +3,7 @@ import type { AppContext } from './context.ts';
 import { hmac, sha256 } from './crypto.ts';
 import { slideServerContext } from './integrations.ts';
 import { activeChannelSlides, displayContent, minTime } from './planning.ts';
-import { mediaCredit, mediaFields, mediaInfo, placeholderMedia, resolveBackground, type ManifestBackground } from './background.ts';
+import { mediaCredit, mediaFields, mediaInfo, placeholderMedia, resolveBackground, type ManifestBackground, type VideoQuality } from './background.ts';
 import type { MediaInfo } from '@foyer/slide-sdk';
 import { wallScreens } from './walls.ts';
 
@@ -18,6 +18,7 @@ export interface DisplayRow {
   orientation: 'landscape' | 'portrait';
   networks: string;
   sound_allowed: number;
+  video_quality: VideoQuality;
   kind: 'screen' | 'wall';
   wall_rows: number | null;
   wall_cols: number | null;
@@ -30,7 +31,7 @@ export interface DisplayRow {
 
 /** Columns of DisplayRow, for SELECTs. */
 export const DISPLAY_COLUMNS =
-  'id, name, default_channel_id, show_progress, sound_allowed, orientation, networks, kind, wall_rows, wall_cols, wall_bezel, wall_mode, wall_id, wall_row, wall_col';
+  'id, name, default_channel_id, show_progress, sound_allowed, video_quality, orientation, networks, kind, wall_rows, wall_cols, wall_bezel, wall_mode, wall_id, wall_row, wall_col';
 
 /** Where a display sits in its wall; the player shows only that part (wall.ts). */
 export interface ManifestWall {
@@ -216,6 +217,7 @@ export async function buildSlideEntry(
   channelDefault: number,
   displayId: string,
   documentDisplayId = displayId,
+  videoQuality: VideoQuality = 'main',
 ): Promise<ManifestSlide | null> {
   const entry = ctx.registry.get(slide.type);
   if (!entry) return null;
@@ -228,7 +230,7 @@ export async function buildSlideEntry(
     keepAlive: entry.definition.keepAlive ?? false,
     config: parsed.success ? parsed.data : null,
     data: null,
-    background: slide.background_json ? resolveBackground(ctx, JSON.parse(slide.background_json)) : null,
+    background: slide.background_json ? resolveBackground(ctx, JSON.parse(slide.background_json), videoQuality) : null,
     media: {},
     playsToEnd: false,
   };
@@ -240,7 +242,7 @@ export async function buildSlideEntry(
   for (const field of mediaFields(entry.jsonSchema)) {
     const id = config[field.name];
     if (typeof id !== 'string' || !id) continue;
-    const info = mediaInfo(ctx, id);
+    const info = mediaInfo(ctx, id, videoQuality);
     // Still being converted: leave the slide out until it is ready (players are notified then).
     if (info === 'pending') return null;
     if (!info) {
@@ -338,7 +340,7 @@ export async function buildManifest(ctx: AppContext, screen: DisplayRow, opts: {
   const push = async (row: SlideRow, defaultDuration: number) => {
     if (seen.has(row.id)) return;
     seen.add(row.id);
-    const entry = await buildSlideEntry(ctx, row, defaultDuration, display.id, documentDisplayId);
+    const entry = await buildSlideEntry(ctx, row, defaultDuration, display.id, documentDisplayId, display.video_quality);
     if (entry) slides.push(entry);
   };
 

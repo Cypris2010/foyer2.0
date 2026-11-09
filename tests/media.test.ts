@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { json, setup } from './helpers.ts';
 import { sniff, targetFps } from '../apps/server/src/media.ts';
+import { mediaInfo, resolveBackground } from '../apps/server/src/background.ts';
 
 const hasFfmpeg = spawnSync('ffmpeg', ['-version']).status === 0 && spawnSync('ffprobe', ['-version']).status === 0;
 const fixtures = mkdtempSync(join(tmpdir(), 'foyer-fixtures-'));
@@ -207,6 +208,19 @@ describe.skipIf(!hasFfmpeg)('Mediathek', () => {
 
     await app.request('/api/displays/d1', json('PATCH', { soundAllowed: true }, cookie));
     expect((await manifest()).display.soundAllowed).toBe(true);
+
+    // Videoqualität pro Display: 720p statt 1080p, ohne neue Umwandlung.
+    expect((await app.request('/api/displays/d1', json('PATCH', { videoQuality: '4k' }, cookie))).status).toBe(400);
+    const version = (await manifest()).version;
+    await app.request('/api/displays/d1', json('PATCH', { videoQuality: 'sd' }, cookie));
+    const sd = await manifest();
+    expect(sd.version).not.toBe(version);
+    expect(sd.slides.find((s: any) => s.id === id).media[video.id]).toMatchObject({ url: expect.stringMatching(/-v1-720\.mp4$/), width: 1280 });
+    expect(resolveBackground(ctx, { kind: 'video', mediaId: video.id, dim: 0 }, 'sd')).toMatchObject({ url: expect.stringMatching(/-v1-720\.mp4$/) });
+    // Bilder und kleine Quellen haben keine 720p-Variante: Sie bleiben, was sie sind.
+    expect(mediaInfo(ctx, image.id, 'sd')).toMatchObject({ kind: 'image', url: expect.stringMatching(/\.(jpg|png)$/) });
+    await app.request('/api/displays/d1', json('PATCH', { videoQuality: 'main' }, cookie));
+    expect((await manifest()).slides.find((s: any) => s.id === id).media[video.id].url).toMatch(/-v1-1080\.mp4$/);
 
     await app.request(`/api/slides/${id}`, json('PUT', { ...body, duration: 20 }, cookie));
     film = (await manifest()).slides.find((s: any) => s.id === id);

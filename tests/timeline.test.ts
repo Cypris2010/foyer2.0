@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { catchUpRate, slotAt, videoTarget } from '../apps/player/src/timeline.ts';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { bufferedAhead, catchUpRate, keepVideosOnClock, slotAt, videoTarget } from '../apps/player/src/timeline.ts';
 import { bestOffset } from '../apps/player/src/clock.ts';
 
 describe('Fester Zeitplan', () => {
@@ -46,6 +46,75 @@ describe('Videos an der Uhr', () => {
     // nie mehr als 5 % schneller oder langsamer
     expect(catchUpRate(0.8)).toBeCloseTo(0.95);
     expect(catchUpRate(-0.8)).toBeCloseTo(1.05);
+  });
+
+  describe('große Abstände', () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    // Ein Video, das 2 s hinter der Uhr liegt und Sprünge mitzählt.
+    function lateVideo(loadedUpTo = 60) {
+      const seeks: number[] = [];
+      const video = {
+        paused: false,
+        readyState: 4,
+        duration: 60,
+        loop: false,
+        playbackRate: 1,
+        buffered: { length: 1, start: () => 0, end: () => loadedUpTo },
+        get currentTime() {
+          return seeks.at(-1) ?? 0;
+        },
+        set currentTime(value: number) {
+          seeks.push(value);
+        },
+      };
+      const el = { querySelectorAll: () => [video] } as unknown as HTMLElement;
+      return { el, seeks, video };
+    }
+
+    it('springt nicht gleich nach dem Start, sondern holt erst über die Geschwindigkeit auf', () => {
+      const { el, seeks, video } = lateVideo();
+      const start = performance.now();
+      const stop = keepVideosOnClock(el, () => 2 + (performance.now() - start) / 1000);
+      vi.advanceTimersByTime(4000);
+      expect(seeks).toEqual([]);
+      expect(video.playbackRate).toBeCloseTo(1.05);
+      vi.advanceTimersByTime(2000);
+      expect(seeks).toHaveLength(1);
+      stop();
+      expect(video.playbackRate).toBe(1);
+    });
+
+    it('springt danach höchstens alle paar Sekunden', () => {
+      const { el, seeks } = lateVideo();
+      // Die Sollposition läuft davon: Das Video bleibt trotz Sprung zurück.
+      const start = performance.now();
+      const stop = keepVideosOnClock(el, () => 2 + (3 * (performance.now() - start)) / 1000);
+      vi.advanceTimersByTime(12_000);
+      expect(seeks.length).toBeLessThanOrEqual(3);
+      stop();
+    });
+
+    it('springt nie an eine Stelle, die noch nicht geladen ist', () => {
+      // Puffer leer gelaufen: Ein Sprung nach vorn würde nur den nächsten Hänger auslösen.
+      const { el, seeks, video } = lateVideo(1);
+      const start = performance.now();
+      const stop = keepVideosOnClock(el, () => 2 + (performance.now() - start) / 1000);
+      vi.advanceTimersByTime(20_000);
+      expect(seeks).toEqual([]);
+      // Auch nicht schneller abspielen: Das leert den Puffer noch mehr.
+      expect(video.playbackRate).toBe(1);
+      stop();
+    });
+  });
+
+  it('zählt nur geladene Sekunden ab der gefragten Stelle', () => {
+    const ranges = { length: 2, start: (i: number) => [0, 10][i], end: (i: number) => [4, 12][i] } as unknown as TimeRanges;
+    expect(bufferedAhead(ranges, 1)).toBe(3);
+    expect(bufferedAhead(ranges, 5)).toBe(0);
+    expect(bufferedAhead(ranges, 11)).toBe(1);
+    expect(bufferedAhead(ranges, 12)).toBe(0);
   });
 });
 

@@ -310,6 +310,7 @@ function ScreenSettings({ display, displays, channels, user, onChanged, onReveal
         <input type="checkbox" checked={display.soundAllowed} onChange={(e) => patch({ soundAllowed: e.target.checked })} />
         Ton erlaubt (Videofolien mit „Mit Ton“ spielen hier hörbar)
       </label>
+      <VideoQualitySelect display={display} patch={patch} />
       {can(user, 'admin') && (
         <>
           <label className="field">
@@ -449,8 +450,21 @@ function WallSettings({ display, displays, channels, onChanged, onError }: Share
         <input type="checkbox" checked={display.soundAllowed} onChange={(e) => patch({ soundAllowed: e.target.checked })} />
         Ton erlaubt (spielt nur auf einem Display, sonst gibt es Echo: oben links, im Stapel auf dem ersten)
       </label>
+      <VideoQualitySelect display={display} patch={patch} />
       <p className="muted modal__hint">Änderungen werden sofort gespeichert. {saved && <span className="saved">Gespeichert ✓</span>}</p>
     </div>
+  );
+}
+
+function VideoQualitySelect({ display, patch }: { display: Display; patch: (body: Record<string, unknown>) => unknown }) {
+  return (
+    <label className="field">
+      <span>Videoqualität</span>
+      <select value={display.videoQuality} onChange={(e) => patch({ videoQuality: e.target.value as Display['videoQuality'] })}>
+        <option value="main">1080p (Standard)</option>
+        <option value="sd">720p (wenn Videos auf dem Gerät ruckeln)</option>
+      </select>
+    </label>
   );
 }
 

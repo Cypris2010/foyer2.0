@@ -33,6 +33,12 @@ const SEEK_S = 1;
 const MAX_RATE_CHANGE = 0.05;
 const CHECK_MS = 1000;
 const SEEK_COOLDOWN_MS = 3000;
+// A slow start is normal, and a seek right after it stalls the video a second
+// time (back to a keyframe, up to 10 s away). So at first only by speed.
+const START_GRACE_MS = 5000;
+// Below this much loaded video there is nothing to catch up with: jumping or
+// speeding up would only empty the buffer and stall it again.
+const MIN_BUFFER_S = 2;
 
 /** Where a video should be after `seconds` on screen (null: past its end). */
 export function videoTarget(seconds: number, length: number, loop: boolean): number | null {
@@ -45,6 +51,14 @@ export function videoTarget(seconds: number, length: number, loop: boolean): num
 export function catchUpRate(ahead: number): number {
   if (Math.abs(ahead) <= ON_TIME_S) return 1;
   return 1 - Math.max(-MAX_RATE_CHANGE, Math.min(MAX_RATE_CHANGE, ahead * 0.5));
+}
+
+/** Seconds of loaded video from `time` on; 0 when `time` itself is not loaded. */
+export function bufferedAhead(buffered: TimeRanges, time: number): number {
+  for (let i = 0; i < buffered.length; i++) {
+    if (buffered.start(i) <= time && time < buffered.end(i)) return buffered.end(i) - time;
+  }
+  return 0;
 }
 
 /** Moves every video of a slide (content and background) to the given time. */
@@ -68,7 +82,7 @@ export function seekVideos(el: HTMLElement, seconds: number) {
  * speed, large ones (stalls, slow start) by seeking. Returns the stop function.
  */
 export function keepVideosOnClock(el: HTMLElement, elapsedSeconds: () => number): () => void {
-  let seekedAt = -Infinity;
+  let noSeekUntil = performance.now() + START_GRACE_MS;
   const check = () => {
     for (const video of Array.from(el.querySelectorAll('video'))) {
       if (video.paused || video.readyState < 2) continue;
@@ -80,9 +94,8 @@ export function keepVideosOnClock(el: HTMLElement, elapsedSeconds: () => number)
         if (ahead > video.duration / 2) ahead -= video.duration;
         else if (ahead < -video.duration / 2) ahead += video.duration;
       }
-      if (Math.abs(ahead) >= SEEK_S) {
-        if (performance.now() - seekedAt < SEEK_COOLDOWN_MS) continue;
-        seekedAt = performance.now();
+      if (Math.abs(ahead) >= SEEK_S && performance.now() >= noSeekUntil && bufferedAhead(video.buffered, target) >= MIN_BUFFER_S) {
+        noSeekUntil = performance.now() + SEEK_COOLDOWN_MS;
         video.playbackRate = 1;
         try {
           video.currentTime = target;
@@ -90,7 +103,8 @@ export function keepVideosOnClock(el: HTMLElement, elapsedSeconds: () => number)
           // not seekable
         }
       } else {
-        const rate = catchUpRate(ahead);
+        const starving = ahead < 0 && bufferedAhead(video.buffered, video.currentTime) < MIN_BUFFER_S;
+        const rate = starving ? 1 : catchUpRate(ahead);
         if (video.playbackRate !== rate) video.playbackRate = rate;
       }
     }

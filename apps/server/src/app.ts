@@ -62,6 +62,7 @@ const displayPatch = z.object({
   defaultChannelId: z.string().nullable().optional(),
   showProgress: z.boolean().optional(),
   soundAllowed: z.boolean().optional(),
+  videoQuality: z.enum(['main', 'sd']).optional(),
   orientation: z.enum(['landscape', 'portrait']).optional(),
   networks: cidrList.optional(),
   wallRows: wallSide.optional(),
@@ -292,6 +293,7 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
           defaultChannelId: r.default_channel_id,
           showProgress: r.show_progress === 1,
           soundAllowed: r.sound_allowed === 1,
+          videoQuality: r.video_quality,
           orientation: r.orientation,
           networks: r.networks,
           lastSeenAt: r.kind === 'wall' ? offlineSince : r.last_seen_at,
@@ -399,6 +401,7 @@ export function createApp(ctx: AppContext, options: AppOptions = {}) {
     if (body.data.defaultChannelId !== undefined) set('default_channel_id', body.data.defaultChannelId);
     if (body.data.showProgress !== undefined) set('show_progress', body.data.showProgress ? 1 : 0);
     if (body.data.soundAllowed !== undefined) set('sound_allowed', body.data.soundAllowed ? 1 : 0);
+    if (body.data.videoQuality !== undefined) set('video_quality', body.data.videoQuality);
     if (body.data.orientation !== undefined) set('orientation', body.data.orientation);
     if (body.data.networks !== undefined) set('networks', body.data.networks);
     const displayId = c.req.param('id');

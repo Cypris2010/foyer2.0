@@ -13,6 +13,7 @@ export interface Display {
   defaultChannelId: string | null;
   showProgress: boolean;
   soundAllowed: boolean;
+  videoQuality: 'main' | 'sd';
   orientation: 'landscape' | 'portrait';
   networks: string;
   lastSeenAt: number | null;

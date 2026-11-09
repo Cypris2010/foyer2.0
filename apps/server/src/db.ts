@@ -197,6 +197,10 @@ const migrations: Array<string | ((db: DatabaseSync) => void)> = [
   );
   CREATE INDEX api_keys_user ON api_keys (user_id);
   `,
+  // Which video variant a display plays: "sd" (720p) for devices that stutter at 1080p.
+  `
+  ALTER TABLE displays ADD COLUMN video_quality TEXT NOT NULL DEFAULT 'main' CHECK (video_quality IN ('main', 'sd'));
+  `,
 ];
 
 export type Db = DatabaseSync;

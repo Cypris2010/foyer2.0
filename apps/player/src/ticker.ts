@@ -10,6 +10,9 @@ import type { Stack } from './wall.ts';
 const TRANSITION_MS = 1500;
 // Joining a slide that already runs: seek media only when clearly behind.
 const CATCH_UP_MIN_S = 1;
+// The next slide loads once the old one is gone: weak devices stutter when a
+// video starts while another one loads. Not later, it needs the time to buffer.
+const PREPARE_NEXT_MS = TRANSITION_MS;
 
 interface Mounted {
   key: string;
@@ -48,6 +51,7 @@ export class Ticker {
   private current: Mounted | null = null;
   private mounted = new Map<string, Mounted>();
   private timer: ReturnType<typeof setTimeout> | undefined;
+  private prepareTimer: ReturnType<typeof setTimeout> | undefined;
   /** Clock time the current slide began, and the slot it fills on the timeline. */
   private startedAt = 0;
   private slot: Slot | null = null;
@@ -206,7 +210,8 @@ export class Ticker {
       return;
     }
     if (this.pending) this.apply(this.pending);
-    const slot = slotAt(this.durations(), now);
+    // Woken in the last millisecond of the slot: that is its end, or the slide would restart.
+    const slot = slotAt(this.durations(), this.current && this.slot ? Math.max(now, this.slot.end) : now);
     if (!slot) return this.idle();
     this.play(slot);
   };
@@ -264,15 +269,10 @@ export class Ticker {
       }, TRANSITION_MS);
     }
 
-    const next = this.slides[(this.index + 1) % this.slides.length];
-    if (next && next.id !== slide.id) {
-      const prepared = this.mount(next);
-      if (prepared) {
-        prepared.el.classList.add('is-next');
-        prepared.background.prepare();
-        prepared.instance.prepare?.();
-      }
-    }
+    // Short slides: early enough that the next one is ready when its turn comes.
+    const remaining = end === undefined ? Infinity : Math.max(0, end - this.clock());
+    clearTimeout(this.prepareTimer);
+    this.prepareTimer = setTimeout(this.prepareNext, Math.min(PREPARE_NEXT_MS, remaining / 2));
 
     if (!this.following && end !== undefined) {
       const elapsed = Math.max(0, this.clock() - start);
@@ -283,6 +283,18 @@ export class Ticker {
     }
     return true;
   }
+
+  private prepareNext = () => {
+    if (!this.current) return;
+    const next = this.slides[(this.index + 1) % this.slides.length];
+    if (!next || next.id === this.current.slide.id) return;
+    const prepared = this.mount(next);
+    if (prepared) {
+      prepared.el.classList.add('is-next');
+      prepared.background.prepare();
+      prepared.instance.prepare?.();
+    }
+  };
 
   private mount(slide: ManifestSlide): Mounted | null {
     const key = signature(slide);
@@ -370,6 +382,7 @@ export class Ticker {
 
   private idle() {
     clearTimeout(this.timer);
+    clearTimeout(this.prepareTimer);
     this.stopVideoSync();
     this.stopVideoSync = () => {};
     this.slot = null;

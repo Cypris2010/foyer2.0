@@ -37,32 +37,41 @@ export function checkBackground(ctx: AppContext, background: Background, allowed
 }
 
 /** Resolves media references to file URLs. Media that is not ready yet shows no background. */
-export function resolveBackground(ctx: AppContext, stored: unknown): ManifestBackground | null {
+/** Video variant a display plays. Keys of the media's variants; see VIDEO_PROFILES. */
+export type VideoQuality = 'main' | 'sd';
+
+// Images and small sources have no 720p variant: they stay what they are.
+function pickVariant(variantsJson: string, quality: VideoQuality): MediaVariant | undefined {
+  const variants = JSON.parse(variantsJson) as Record<string, MediaVariant>;
+  return variants[quality] ?? variants.main;
+}
+
+export function resolveBackground(ctx: AppContext, stored: unknown, quality: VideoQuality = 'main'): ManifestBackground | null {
   const parsed = backgroundSchema.safeParse(stored);
   const background = parsed.success ? parsed.data : null;
   if (!background) return null;
   if (background.kind === 'color') return background;
   const media = ctx.media.get(background.mediaId);
   if (!media || media.status !== 'ready' || media.kind !== background.kind) return null;
-  const main = (JSON.parse(media.variants_json) as Record<string, MediaVariant>).main;
-  if (!main) return null;
-  if (background.kind === 'image') return { kind: 'image', url: mediaUrl(main.file), fit: background.fit, dim: background.dim };
-  return { kind: 'video', url: mediaUrl(main.file), poster: media.poster ? mediaUrl(media.poster) : null, dim: background.dim };
+  const variant = pickVariant(media.variants_json, quality);
+  if (!variant) return null;
+  if (background.kind === 'image') return { kind: 'image', url: mediaUrl(variant.file), fit: background.fit, dim: background.dim };
+  return { kind: 'video', url: mediaUrl(variant.file), poster: media.poster ? mediaUrl(media.poster) : null, dim: background.dim };
 }
 
 /** A media item as renderers get it; 'pending' while it is still being processed. */
-export function mediaInfo(ctx: AppContext, id: string): MediaInfo | 'pending' | null {
+export function mediaInfo(ctx: AppContext, id: string, quality: VideoQuality = 'main'): MediaInfo | 'pending' | null {
   const media = ctx.media.get(id);
   if (!media || media.status === 'failed') return null;
   if (media.status !== 'ready') return 'pending';
-  const main = (JSON.parse(media.variants_json) as Record<string, MediaVariant>).main;
-  if (!main) return null;
+  const variant = pickVariant(media.variants_json, quality);
+  if (!variant) return null;
   return {
     kind: media.kind,
-    url: mediaUrl(main.file),
+    url: mediaUrl(variant.file),
     poster: media.poster ? mediaUrl(media.poster) : null,
-    width: main.width,
-    height: main.height,
+    width: variant.width,
+    height: variant.height,
     duration: media.duration_s,
   };
 }

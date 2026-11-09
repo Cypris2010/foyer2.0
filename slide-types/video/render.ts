@@ -25,6 +25,18 @@ export default defineRenderer<VideoConfig>((root, { config, media, ctx, playsToE
   video.addEventListener('ended', () => active && ctx.done());
   video.addEventListener('error', () => ctx.reportError(`MediaError ${video.error?.code ?? '?'}`));
 
+  // Only when needed: even a seek to where the video already is flushes the
+  // decoder, and the video would stall right as it starts. Rewound in prepare(),
+  // while hidden, so start() finds the first frame ready.
+  const rewind = () => {
+    if (video.currentTime === 0) return;
+    try {
+      video.currentTime = 0;
+    } catch {
+      // not seekable yet; starts from the beginning anyway
+    }
+  };
+
   const play = () => {
     const played = video.play();
     // Older Chromium returns undefined; newer a promise that rejects when autoplay is blocked.
@@ -45,14 +57,11 @@ export default defineRenderer<VideoConfig>((root, { config, media, ctx, playsToE
   return {
     prepare() {
       if (video.readyState === 0) video.load();
+      rewind();
     },
     start() {
       active = true;
-      try {
-        video.currentTime = 0;
-      } catch {
-        // not seekable yet; starts from the beginning anyway
-      }
+      rewind();
       play();
     },
     stop() {
