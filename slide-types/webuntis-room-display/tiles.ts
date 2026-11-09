@@ -1,7 +1,8 @@
-// Tiles for slides with many rooms: only what is running and what comes next, so it stays
-// readable. Not part of the wp-foyer port; up to two rooms keep the cards of legacy.js.
+// The tiles of the room display: what is running and what comes next, for any number of rooms.
+// Not from wp-foyer; legacy.js reads the data as wp-foyer did and hands it over.
 
-export const COMPACT_FROM_ROOMS = 3;
+const FEW_ROOMS = 2;
+const NEXT_WITH_FEW_ROOMS = 3;
 
 interface RoomEvent {
   startDate: Date;
@@ -20,33 +21,37 @@ interface RoomData {
   upcoming?: RoomEvent[];
 }
 
-export interface CompactLabels {
+export interface TileLabels {
   next: string;
+  noUpcoming: string;
   free: string;
   occupied: string;
   cancelled: string;
 }
 
-export interface CompactFormat {
+export interface TileFormat {
   formatRange(start: Date, end: Date): string;
   isGenericType(value: string): boolean;
 }
 
-export interface CompactTile {
+export interface RoomTile {
   room: string;
   occupied: boolean;
   time: string;
   booking: string;
   teachers: string;
-  next: { time: string; booking: string } | null;
+  next: { time: string; booking: string }[];
 }
 
 const unique = (values: string[]) => [...new Set(values.filter(Boolean))];
 
-/** The booking a tile names under "Danach". */
-export const nextBooking = <T extends { cancelled?: boolean }>(upcoming: T[]): T | undefined => upcoming.find((event) => !event.cancelled);
+/** The next bookings a tile names: a few on a slide with few rooms, otherwise one. */
+export function shownUpcoming<T extends RoomEvent>(upcoming: T[], roomCount: number, hideUpcoming: boolean): T[] {
+  if (hideUpcoming) return [];
+  return upcoming.filter((event) => !event.cancelled).slice(0, roomCount <= FEW_ROOMS ? NEXT_WITH_FEW_ROOMS : 1);
+}
 
-function booking(event: RoomEvent, format: CompactFormat): string {
+function booking(event: RoomEvent, format: TileFormat): string {
   const extra = [
     event.type && !format.isGenericType(event.type) ? event.type : '',
     event.textSubstitute ?? '',
@@ -56,13 +61,12 @@ function booking(event: RoomEvent, format: CompactFormat): string {
 }
 
 /** What a tile says. Several lessons at once share the tile. */
-export function compactTiles(rooms: RoomData[], labels: CompactLabels, format: CompactFormat, hideUpcoming: boolean): CompactTile[] {
+export function roomTiles(rooms: RoomData[], labels: TileLabels, format: TileFormat, roomCount: number, hideUpcoming: boolean): RoomTile[] {
   return rooms.map((room) => {
     const current = room.current ?? [];
     const active = current.filter((event) => !event.cancelled);
     const shown = active.length ? active : current;
     const bookings = unique(shown.map((event) => booking(event, format))).join(' / ');
-    const next = hideUpcoming ? undefined : nextBooking(room.upcoming ?? []);
     return {
       room: room.room,
       occupied: active.length > 0,
@@ -74,7 +78,10 @@ export function compactTiles(rooms: RoomData[], labels: CompactLabels, format: C
         : '',
       booking: !active.length && shown.length ? unique([labels.cancelled, bookings]).join(': ') : bookings,
       teachers: unique(shown.flatMap((event) => (event.teachers ?? '').split(/,\s*/))).join(', '),
-      next: next ? { time: format.formatRange(next.startDate, next.endDate), booking: booking(next, format) } : null,
+      next: shownUpcoming(room.upcoming ?? [], roomCount, hideUpcoming).map((event) => ({
+        time: format.formatRange(event.startDate, event.endDate),
+        booking: booking(event, format),
+      })),
     };
   });
 }
@@ -93,7 +100,15 @@ function part(name: string, text: string): HTMLElement {
   return node;
 }
 
-export function renderCompact(grid: HTMLElement, rooms: RoomData[], labels: CompactLabels, format: CompactFormat, hideUpcoming: boolean): void {
+function nextRow(time: string, text: string): HTMLElement {
+  const row = part('next-row', '');
+  const label = document.createElement('strong');
+  label.textContent = time;
+  row.append(label, ` ${text}`);
+  return row;
+}
+
+export function renderTiles(grid: HTMLElement, rooms: RoomData[], labels: TileLabels, format: TileFormat, roomCount: number, hideUpcoming: boolean): void {
   grid.style.setProperty('--foyer-room-columns', '1');
   grid.style.setProperty('--foyer-room-rows', '1');
 
@@ -105,14 +120,13 @@ export function renderCompact(grid: HTMLElement, rooms: RoomData[], labels: Comp
   tiles.style.setProperty('--foyer-tile-columns-portrait', String(size.portraitColumns));
   tiles.style.setProperty('--foyer-tile-rows-portrait', String(size.portraitRows));
 
-  for (const room of compactTiles(rooms, labels, format, hideUpcoming)) {
+  for (const room of roomTiles(rooms, labels, format, roomCount, hideUpcoming)) {
     const tile = document.createElement('section');
     tile.className = `foyer-webuntis-room-display__tile ${room.occupied ? 'is-occupied' : 'is-free'}`;
 
     const header = document.createElement('header');
     header.className = 'foyer-webuntis-room-display__tile-header';
-    const pill = part('status', room.occupied ? labels.occupied : labels.free);
-    header.append(part('room', room.room), pill);
+    header.append(part('room', room.room), part('status', room.occupied ? labels.occupied : labels.free));
     tile.append(header);
 
     const now = document.createElement('div');
@@ -122,11 +136,10 @@ export function renderCompact(grid: HTMLElement, rooms: RoomData[], labels: Comp
     if (room.teachers) now.append(part('teachers', room.teachers));
     tile.append(now);
 
-    if (room.next) {
+    if (!hideUpcoming) {
       const next = part('next', '');
-      const label = document.createElement('strong');
-      label.textContent = `${labels.next} ${room.next.time}`;
-      next.append(label, ` ${room.next.booking}`);
+      room.next.forEach((entry, index) => next.append(nextRow(index ? entry.time : `${labels.next} ${entry.time}`, entry.booking)));
+      if (!room.next.length) next.textContent = labels.noUpcoming;
       tile.append(next);
     }
     tiles.append(tile);

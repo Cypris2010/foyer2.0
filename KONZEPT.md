@@ -32,7 +32,7 @@ Ziel: Funktionsgleicher, eigenständiger Neubau mit (1) sehr leicht ergänzbaren
 | `calendar` | mehrere ICS-Feeds, Tage voraus, Titel, Cache | eigener ICS-Parser |
 | `pdf` | PDF-Upload → Imagick rendert jede Seite als Bild | Stack |
 | `teacher-dashboard` | WebUntis-TXT (Pipe), Lehrkräfte-Auswahl, Theme hell/dunkel, Legende/Statusfilter | Client-Polling 30 s |
-| `webuntis-room-display` | WebUntis-TXT, Raum-Mehrfachauswahl, Refresh-Intervall (≥15 s), „Nächste“/„Aktuell“ ausblenden | Zusammenführen von Stunden (Lücke ≤ 5 min), Ausfall-Markierung (`cancelled`/`gone`), generische „Unterricht“-Marker filtern, max. 3 kommende, Uhr, Auto-Skalierung, Fallback-Datei |
+| `webuntis-room-display` | WebUntis-TXT, Raum-Mehrfachauswahl, Refresh-Intervall (≥15 s), „Nächste“ ausblenden | Zusammenführen von Stunden (Lücke ≤ 5 min), Ausfall-Markierung (`cancelled`/`gone`), generische „Unterricht“-Marker filtern, max. 3 kommende, Uhr, Fallback-Datei |
 | `production`, `upcoming-productions` | Theater-for-WP-Events | nur mit Theater-Plugin → **streichen** oder als ICS/JSON-Quelle neu |
 
 Untis-Zeilenformat (Raumdatei): `raum|start|ende|räume|lehrer|klassen|fach|status|typ|text_vertretung|text_buchung`.
@@ -334,11 +334,13 @@ Mit JS: `foyer.onStart(() => tl.play())`, `foyer.onStop(() => tl.pause())`, `foy
 
 ### 5.6 WebUntis-Folien: 1:1-Übernahme
 
-**Grundsatz:** Raumanzeige (`webuntis-room-display`) und Lehrkräfte-Dashboard (`teacher-dashboard`) werden **verhaltens- und pixelgleich** übernommen: gleiche Optionen, Texte, Logik, DOM-Struktur, Klassennamen und CSS. Es gibt kein Redesign und keine „Verbesserung“ der Darstellung. Einzige Ausnahmen: Ab drei Räumen zeigt die Raumanzeige kleinere Kacheln (`compact.ts`), weil die Karten dann die laufende Stunde abschneiden; die Karten bis zwei Räume bleiben pixelgleich. Räume, die genau dasselbe anzeigen würden, teilen sich eine Karte oder Kachel (`same-booking.ts`), etwa Aula I und Aula II bei einer gemeinsamen Veranstaltung.
+**Grundsatz:** Das Lehrkräfte-Dashboard (`teacher-dashboard`) wird **verhaltens- und pixelgleich** übernommen: gleiche Optionen, Texte, Logik, DOM-Struktur, Klassennamen und CSS. Es gibt kein Redesign und keine „Verbesserung“ der Darstellung.
+
+**Raumanzeige (`webuntis-room-display`):** Das Lesen der Daten kommt unverändert aus wp-foyer, die Darstellung nicht mehr. Die alten Karten schnitten ab drei Räumen die laufende Stunde ab, und ein zweites Design nur für ein bis zwei Räume wirkte uneinheitlich. Deshalb zeigen alle Raumfolien dieselben Kacheln (`tiles.ts`). Räume, die genau dasselbe anzeigen würden, teilen sich eine Kachel (`same-booking.ts`), etwa Aula I und Aula II bei einer gemeinsamen Veranstaltung.
 
 **Umsetzung: Code übernehmen, nicht nachbauen**
 - Die bestehenden Dateien `webuntis-room-display.js` (1249 Zeilen) und `teacher-dashboard.js` (508 Zeilen) kommen nahezu unverändert in die Folientyp-Ordner. Geändert wird nur die Hülle: Statt globalem `MutationObserver` + `DOMContentLoaded` exportiert jedes Modul `mount(node)` / `unmount(node)`. Das sind die vorhandenen `initInstance`/`destroyInstance`, die Logik darin bleibt Zeile für Zeile gleich.
-- Das CSS (37 Regeln Lehrkräfte-Dashboard, 63 Regeln Raumanzeige) wird **unverändert** aus `public/css/foyer-public.css` übernommen (Z. 164–459 und 1191–1588). Achtung: Es existiert nur in der kompilierten Datei, nicht in den LESS-Quellen unter `raw/less`.
+- Das CSS des Lehrkräfte-Dashboards (37 Regeln) wird **unverändert** aus `public/css/foyer-public.css` übernommen (Z. 164–459), von der Raumanzeige nur Seitenrahmen und Uhr. Achtung: Es existiert nur in der kompilierten Datei, nicht in den LESS-Quellen unter `raw/less`.
 - **Auch der Rahmen muss gleich sein**, denn die Optik hängt nicht nur am Folien-CSS. Für diese Folien übernimmt der neue Player auch die Basis-Styles des alten Displays (`foyer-public.css` Z. 1–160: `body.single-foyer_display`-Regeln, Box-Sizing, Hintergrund) und die Schriftskalierung `html { font-size: calc(16 / 1080 * 100vmin) }` aus `foyer-public-slide.less`. Sie werden auf den Folien-Container begrenzt, damit sie andere Folientypen nicht beeinflussen. Falls `wp_head` dort zusätzlich Theme-CSS einbindet, wird das beim Golden-Test-Abgleich sichtbar und dann ebenfalls übernommen.
 - Schrift: `system-ui`-Stack wie heute, also keine Webfonts. Auf Airtame rendert damit dieselbe Systemschrift wie bisher.
 - Das Template erzeugt dasselbe Markup mit denselben `data-*`-Attributen und Texten wie die PHP-Templates.
@@ -354,16 +356,17 @@ Mit JS: `foyer.onStart(() => tl.play())`, `foyer.onStop(() => tl.pause())`, `foy
 
 | Bereich | Verhalten heute (beizubehalten) |
 |---|---|
-| Optionen | Quelle (Standard `<untis-quelle>/raeume_ganzer_tag.txt`; leer → Fallback-Datei), Räume (Mehrfachauswahl), Refresh in s (Standard 60, min. 15), „Nächste Belegungen ausblenden“, „‚Aktuell‘-Überschrift ausblenden“ |
+| Optionen | Überschrift, Quelle (Standard `<untis-quelle>/raeume_ganzer_tag.txt`; leer → Fallback-Datei), Räume (Mehrfachauswahl), Refresh in s (Standard 60, min. 15), „Nächste Belegungen ausblenden“ |
 | Raumliste im Admin | eindeutige Werte aus Spalte 0, `natcasesort`, Cache 5 min, Fehlermeldungen wie heute; gespeicherte Auswahl bleibt bei Ladefehler erhalten |
 | Format | `raum\|start\|ende\|räume\|lehrer\|klassen\|fach\|status\|typ\|text_vertretung\|text_buchung`, Datum `YYYY-MM-DD HH:MM` (lokal) |
 | Parsing | Leerzeilen/ungültige Daten überspringen; Raum whitespace-normalisiert; entfällt, wenn Status `cancelled` oder `gone`; Titel = `Fach • Klassen`; Klassen mit `, ` |
 | Zusammenführen | gleicher Raum + gleiche Lehrkräfte-Tokens + gleiche Klassen-Tokens + gleiches Fach, Überlappung oder Lücke ≤ 5 min; Texte mit ` • ` verbinden (außer schon enthalten); `cancelled` per ODER |
-| Einteilung | nur Einträge mit Ende > jetzt; „aktuell“ = Start ≤ jetzt < Ende (mehrere möglich); „kommend“ = Start > jetzt, max. 3 |
-| Raster | Spalten = min(⌈√n⌉, n), Zeilen = ⌈n/Spalten⌉ |
-| Spalte | Raumname + Badge „Belegt“ (wenn ein nicht entfallener Eintrag läuft) bzw. „Frei“; Abschnitt „Aktuell“: Block aktive + Block entfallene, **Rotation alle 10 s** mit Overlay (180/420 ms); sonst „Der Raum ist aktuell frei.“; „Nächste Belegungen“ als Karten (bis 3 Spalten) oder „Keine weiteren Belegungen heute.“ |
-| Details | `HH:MM – HH:MM`, Titel, „Lehrperson(en): …“, „Hinweis: …“ aus Typ • Vertretungstext • Buchungstext (generisches „Unterricht“ ausgefiltert) |
-| Skalierung | pro Spalte Höhe/480, oberhalb 1 gedämpft (×0,35), begrenzt auf 0,5–1,4; ab 1,15 Klasse `--spacious`; neu bei Render und Resize |
+| Einteilung | nur Einträge mit Ende > jetzt; „aktuell“ = Start ≤ jetzt < Ende (mehrere möglich); „kommend“ = Start > jetzt |
+| Zusammenfassen | Räume mit gleicher laufender Belegung und gleichen angezeigten nächsten Terminen teilen sich eine Kachel („Aula I + Aula II“); Räume, die einfach nur frei sind, bleiben getrennt |
+| Raster | quer: Spalten = ⌈√n⌉; hochkant: 1 Spalte bis 3 Kacheln, sonst 2; n = Kacheln nach dem Zusammenfassen |
+| Kachel | Raumname + Schild „Belegt“ (wenn ein nicht entfallener Eintrag läuft) bzw. „Frei“; laufende Stunde; nächste Termine ohne entfallene: bis 3 auf Folien mit bis zu 2 Räumen, sonst 1, oder „Keine weiteren Belegungen heute.“ |
+| Details | `HH:MM – HH:MM`, Titel und Typ • Vertretungstext • Buchungstext (generisches „Unterricht“ ausgefiltert), Lehrkräfte; nur Entfallenes: „Unterricht entfällt: …“ |
+| Skalierung | Schrift nach Kachelzahl, so dass alle Zeilen in die Kachel passen |
 | Kopf | Uhr `d.m.Y` / `H:i` in Schulzeitzone, minutengenau; „Aktualisiert um HH:MM“ aus `Last-Modified` → `Date` → jetzt |
 | Fehler | „Daten konnten nicht geladen werden. (HTTP …)“; Polling läuft weiter; ohne Räume Hinweis „Bitte wählen Sie mindestens einen Raum …“ |
 

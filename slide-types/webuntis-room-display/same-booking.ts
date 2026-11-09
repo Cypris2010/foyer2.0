@@ -1,5 +1,5 @@
-// Rooms that show exactly the same bookings share one card or tile, e.g. Aula I and Aula II
-// during an assembly. Not part of the wp-foyer port.
+// Rooms that show exactly the same bookings share one tile, e.g. Aula I and Aula II during an
+// assembly. Not part of the wp-foyer port.
 
 interface RoomEvent {
   startDate: Date;
@@ -18,7 +18,7 @@ interface RoomData {
   upcoming?: RoomEvent[];
 }
 
-/** Which of a room's upcoming bookings its card or tile shows. */
+/** Which of a room's upcoming bookings its tile shows. */
 export type ShownUpcoming = (upcoming: RoomEvent[]) => RoomEvent[];
 
 const signature = (event: RoomEvent) =>
@@ -34,7 +34,7 @@ const signature = (event: RoomEvent) =>
   ]);
 
 /**
- * Merges rooms whose card would say the same, at the place of the first of them. Rooms with
+ * Merges rooms whose tile would say the same, at the place of the first of them. Rooms with
  * nothing to show stay apart: being free together is not a shared booking.
  */
 export function mergeSameBookings<T extends RoomData>(rooms: T[], shownUpcoming: ShownUpcoming): T[] {

@@ -1,21 +1,19 @@
-// Room display, ported 1:1 from wp-foyer (public/js/webuntis-room-display.js).
+// Room display, data logic ported from wp-foyer (public/js/webuntis-room-display.js).
 // Changes against the original:
 //   - the data comes from the Foyer server (rows of the Untis export, already
 //     filtered to the slide's rooms) instead of fetch(); the refresh timer
 //     re-renders with the latest data so "current" and "upcoming" move on,
 //   - mount/update/unmount are exported instead of the MutationObserver,
 //   - the parser reads rows instead of splitting the text,
-//   - from three rooms on, compact.ts draws smaller tiles instead of the cards,
+//   - tiles.ts draws the rooms instead of the cards,
 //   - rooms that show the same bookings share one card or tile (same-booking.ts).
 /* eslint-disable */
-import { nextBooking, renderCompact } from './compact.ts';
+import { renderTiles, shownUpcoming } from './tiles.ts';
 import { mergeSameBookings } from './same-booking.ts';
 
 
 // Track per-node runtime state so timers can be cleaned up.
 var instances = new WeakMap();
-// Limit how many future lessons are shown in the upcoming list.
-var MAX_UPCOMING = 3;
 // Treat back-to-back lessons with up to five minutes gap as one block.
 var MERGE_GAP_MS = 5 * 60 * 1000;
 
@@ -109,48 +107,6 @@ function ensureCommaSpacing(value) {
 		return '';
 	}
 	return value.replace(/,\s*/g, ', ').trim();
-}
-
-function applyColumnScaling(node) {
-	var grid = node.querySelector('.foyer-webuntis-room-display__grid');
-	if (!grid) {
-		return;
-	}
-	var schedule = (typeof window !== 'undefined' && window.requestAnimationFrame) ? window.requestAnimationFrame.bind(window) : function (callback) {
-		return setTimeout(callback, 16);
-	};
-	schedule(function () {
-		var columns = grid.querySelectorAll('.foyer-webuntis-room-display__column');
-		if (!columns.length) {
-			return;
-		}
-		var baseline = 480;
-		var minScale = 0.5;
-		var maxScale = 1.4;
-		for (var i = 0; i < columns.length; i++) {
-			var column = columns[i];
-			var rect = column.getBoundingClientRect();
-			if (!rect.height) {
-				column.style.removeProperty('--foyer-column-scale');
-				column.classList.remove('foyer-webuntis-room-display__column--spacious');
-				continue;
-			}
-			var heightRatio = rect.height / baseline;
-			// Dampening keeps tall displays from inflating the type too aggressively.
-			var scale = heightRatio <= 1 ? heightRatio : 1 + (heightRatio - 1) * 0.35;
-			if (scale < minScale) {
-				scale = minScale;
-			} else if (scale > maxScale) {
-				scale = maxScale;
-			}
-			column.style.setProperty('--foyer-column-scale', scale.toFixed(3));
-			if (scale >= 1.15) {
-				column.classList.add('foyer-webuntis-room-display__column--spacious');
-			} else {
-				column.classList.remove('foyer-webuntis-room-display__column--spacious');
-			}
-		}
-	});
 }
 
 function buildMergeKey(entry) {
@@ -418,133 +374,6 @@ function clearChildren(node) {
 	}
 }
 
-// Utility to create a <p> element that shows a label/value pair when data exists.
-function createLine(label, value, className) {
-	if (!value) {
-		return null;
-	}
-	var line = document.createElement('p');
-	line.className = className;
-	line.textContent = label ? (label + ': ' + value) : value;
-	return line;
-}
-
-// Build the detail block for the currently running event.
-function buildDetails(event, labels, locale, timezone) {
-	var container = document.createElement('div');
-	container.className = 'foyer-webuntis-room-display__details';
-
-	var heading = document.createElement('div');
-	heading.className = 'foyer-webuntis-room-display__heading';
-
-	var time = document.createElement('p');
-	time.className = 'foyer-webuntis-room-display__time';
-	time.textContent = formatTimeRange(event.startDate, event.endDate, locale, timezone);
-	heading.appendChild(time);
-
-	if (event.cancelled) {
-		container.classList.add('is-cancelled');
-	}
-
-	var titleLine = createLine('', event.title, 'foyer-webuntis-room-display__title');
-	if (titleLine) {
-	heading.appendChild(titleLine);
-	}
-
-	container.appendChild(heading);
-
-	var teacherLine = createLine(labels.teachers, event.teachers, 'foyer-webuntis-room-display__line');
-	if (teacherLine) {
-		container.appendChild(teacherLine);
-	}
-
-	var remarks = [];
-	if (event.type && event.type.length && !isGenericLessonType(event.type)) {
-		remarks.push(event.type);
-	}
-	if (event.textSubstitute && event.textSubstitute.length) {
-		remarks.push(event.textSubstitute);
-	}
-	if (event.textBooking && event.textBooking.length) {
-		if (!isGenericLessonType(event.textBooking)) {
-			remarks.push(event.textBooking);
-		}
-	}
-	if (remarks.length) {
-		var remarkLine = createLine(labels.remarks, remarks.join(' • '), 'foyer-webuntis-room-display__line');
-		if (remarkLine) {
-			container.appendChild(remarkLine);
-		}
-	}
-
-	return container;
-}
-
-// Render the list of upcoming bookings underneath the current event.
-function buildUpcomingList(upcoming, labels, locale, timezone) {
-	var list = document.createElement('ul');
-	list.className = 'foyer-webuntis-room-display__list';
-
-	for (var i = 0; i < upcoming.length && i < MAX_UPCOMING; i++) {
-		var event = upcoming[i];
-		var item = document.createElement('li');
-		item.className = 'foyer-webuntis-room-display__list-item';
-		if (event.cancelled) {
-			item.classList.add('is-cancelled');
-		}
-
-		var time = document.createElement('div');
-		time.className = 'foyer-webuntis-room-display__list-time';
-		time.textContent = formatTimeRange(event.startDate, event.endDate, locale, timezone);
-		item.appendChild(time);
-
-		var info = document.createElement('div');
-		info.className = 'foyer-webuntis-room-display__list-info';
-
-		var title = event.title || event.subject || event.textBooking || event.rooms || '';
-		if (title) {
-			var titleNode = document.createElement('div');
-			titleNode.className = 'foyer-webuntis-room-display__list-subject';
-			titleNode.textContent = title;
-			info.appendChild(titleNode);
-		}
-
-		var subtitleParts = [];
-		if (event.cancelled && labels.cancelled) {
-			subtitleParts.push(labels.cancelled);
-		}
-		if (event.teachers) {
-			subtitleParts.push(event.teachers);
-		}
-		if (subtitleParts.length === 0) {
-			var fallbackMeta = event.textSubstitute || '';
-			if (!fallbackMeta && event.textBooking && !isGenericLessonType(event.textBooking)) {
-				fallbackMeta = event.textBooking;
-			}
-			if (!fallbackMeta && event.type && !isGenericLessonType(event.type)) {
-				fallbackMeta = event.type;
-			}
-			if (!fallbackMeta && event.classes) {
-				fallbackMeta = event.classes;
-			}
-			if (fallbackMeta) {
-				subtitleParts.push(fallbackMeta);
-			}
-		}
-		if (subtitleParts.length) {
-			var subtitle = document.createElement('div');
-			subtitle.className = 'foyer-webuntis-room-display__list-meta';
-			subtitle.textContent = subtitleParts.join(' • ');
-			info.appendChild(subtitle);
-		}
-
-		item.appendChild(info);
-		list.appendChild(item);
-	}
-
-	return list;
-}
-
 // Update the "last refreshed" badge that sits in each column header.
 function updateTimestamp(node, labels, locale, timezone, timestamp) {
 	var updatedNode = node.querySelector('.foyer-webuntis-room-display__updated');
@@ -698,263 +527,30 @@ function dateWithZone(date, timezone) {
 	}
 }
 
-function stopAllRotations(state) {
-	if (!state || !state.rotationTimers) {
-		return;
-	}
-	state.rotationTimers.forEach(function (timer) {
-		clearInterval(timer);
-	});
-	state.rotationTimers.clear();
-}
-
-function setBlockVisibility(node, isVisible) {
-	if (!node) {
-		return;
-	}
-	node.classList.toggle('is-visible', isVisible);
-	node.hidden = !isVisible;
-	if (isVisible) {
-		node.style.removeProperty('display');
-	} else {
-		node.style.display = 'none';
-	}
-	node.setAttribute('aria-hidden', isVisible ? 'false' : 'true');
-}
-
-function triggerOverlay(overlay, onBeforeSwitch, onAfterSwitch) {
-	if (!overlay) {
-		if (typeof onBeforeSwitch === 'function') {
-			onBeforeSwitch();
-		}
-		if (typeof onAfterSwitch === 'function') {
-			onAfterSwitch();
-		}
-		return;
-	}
-	overlay.classList.remove('is-active');
-	// Force reflow so the animation restarts even if the class was already applied.
-	void overlay.offsetWidth;
-	overlay.classList.add('is-active');
-	var midpointDelay = 180;
-	var releaseDelay = 420;
-	if (typeof onBeforeSwitch === 'function') {
-		setTimeout(onBeforeSwitch, midpointDelay);
-	}
-	setTimeout(function () {
-		overlay.classList.remove('is-active');
-		if (typeof onAfterSwitch === 'function') {
-			onAfterSwitch();
-		}
-	}, releaseDelay);
-}
-
-function scheduleCurrentRotation(state, roomKey, nodes) {
-	if (!state || !state.rotationTimers) {
-		return;
-	}
-	if (!nodes || !nodes.length) {
-		return;
-	}
-	nodes.forEach(function (node, idx) {
-		setBlockVisibility(node, idx === 0);
-	});
-	if (nodes.length === 1) {
-		return;
-	}
-	var overlay = nodes[0].parentNode ? nodes[0].parentNode.querySelector('.foyer-webuntis-room-display__current-overlay') : null;
-	var index = 0;
-	var timer = setInterval(function () {
-		if (!nodes.length) {
-			return;
-		}
-		var currentIndex = index;
-		var next = (index + 1) % nodes.length;
-		setBlockVisibility(nodes[next], false);
-		triggerOverlay(overlay, function () {
-			setBlockVisibility(nodes[currentIndex], false);
-		}, function () {
-			setBlockVisibility(nodes[next], true);
-		});
-		index = next;
-	}, 10000);
-	state.rotationTimers.set(roomKey, timer);
-}
-
-function buildCurrentBlock(entries, labels, locale, timezone, cancelledGroup) {
-	var block = document.createElement('div');
-	block.className = 'foyer-webuntis-room-display__current';
-	if (cancelledGroup) {
-		block.classList.add('foyer-webuntis-room-display__current--cancelled', 'is-cancelled');
-	} else {
-		block.classList.add('foyer-webuntis-room-display__current--active');
-	}
-	for (var idx = 0; idx < entries.length; idx++) {
-		var detailNode = buildDetails(entries[idx], labels, locale, timezone);
-		detailNode.classList.add('foyer-webuntis-room-display__current-item');
-		block.appendChild(detailNode);
-	}
-	return block;
-}
-
-// Rebuild the entire grid for the requested rooms based on the latest data.
-function render(node, rooms, labels, locale, timezone, options, state) {
+// Rebuild the tiles for the requested rooms based on the latest data.
+function render(node, rooms, state) {
 	var grid = node.querySelector('.foyer-webuntis-room-display__grid');
 	if (!grid) {
 		return;
 	}
 
-	stopAllRotations(state);
 	clearChildren(grid);
-
-	var count = rooms.length;
-	var size = Math.max(1, Math.ceil(Math.sqrt(count || 1)));
-	var columns = Math.min(size, Math.max(count, 1));
-	if (columns === 0) {
-		columns = 1;
-	}
-	var rows = Math.max(1, Math.ceil(count / columns));
-	grid.style.setProperty('--foyer-room-columns', String(columns));
-	grid.style.setProperty('--foyer-room-rows', String(rows));
-
-	var outdatedRoomMarkers = node.querySelectorAll('.foyer-webuntis-room-display__header .foyer-webuntis-room-display__updated');
-	for (var removeIndex = 0; removeIndex < outdatedRoomMarkers.length; removeIndex++) {
-		var marker = outdatedRoomMarkers[removeIndex];
-		marker.parentNode.removeChild(marker);
-	}
 
 	if (!rooms.length) {
 		var placeholder = document.createElement('div');
 		placeholder.className = 'foyer-webuntis-room-display__placeholder';
-		placeholder.textContent = labels.noRooms;
+		placeholder.textContent = state.labels.noRooms;
 		grid.appendChild(placeholder);
 		return;
 	}
 
-	var hideUpcoming = options && options.hideUpcoming;
-	var hideCurrent = options && options.hideCurrent;
-
-	if (options && options.compact) {
-		renderCompact(grid, rooms, labels, {
-			formatRange: function (start, end) {
-				return formatTimeRange(start, end, locale, timezone);
-			},
-			isGenericType: isGenericLessonType
-		}, !!hideUpcoming);
-		return;
-	}
-
-	for (var i = 0; i < rooms.length; i++) {
-		var data = rooms[i];
-		var currentEntries = Array.isArray(data.current) ? data.current.slice() : (data.current ? [data.current] : []);
-		var column = document.createElement('section');
-		column.className = 'foyer-webuntis-room-display__column';
-
-		var header = document.createElement('header');
-		header.className = 'foyer-webuntis-room-display__header';
-
-		var title = document.createElement('h2');
-		title.className = 'foyer-webuntis-room-display__room';
-		title.textContent = data.room;
-		header.appendChild(title);
-
-			var badge = document.createElement('span');
-			badge.className = 'foyer-webuntis-room-display__status';
-			var occupied = currentEntries.some(function (entry) {
-				return !entry.cancelled;
-			});
-			badge.classList.add(occupied ? 'is-occupied' : 'is-free');
-			badge.textContent = occupied ? labels.occupied : labels.free;
-		header.appendChild(badge);
-
-		column.appendChild(header);
-
-		var body = document.createElement('div');
-		body.className = 'foyer-webuntis-room-display__body';
-
-		if (!hideCurrent) {
-			var currentTitle = document.createElement('h3');
-			currentTitle.className = 'foyer-webuntis-room-display__section-title';
-			currentTitle.textContent = labels.current;
-			body.appendChild(currentTitle);
-		}
-
-		if (currentEntries.length) {
-			var rotationWrapper = document.createElement('div');
-			rotationWrapper.className = 'foyer-webuntis-room-display__current-wrapper';
-			var rotationNodes = [];
-			var activeEntries = currentEntries.filter(function (entry) {
-				return !entry.cancelled;
-			});
-			if (activeEntries.length) {
-				var activeBlock = buildCurrentBlock(activeEntries, labels, locale, timezone, false);
-				rotationWrapper.appendChild(activeBlock);
-				rotationNodes.push(activeBlock);
-			}
-			var cancelledEntries = currentEntries.filter(function (entry) {
-				return !!entry.cancelled;
-			});
-			if (cancelledEntries.length) {
-				var cancelledBlock = buildCurrentBlock(cancelledEntries, labels, locale, timezone, true);
-				rotationWrapper.appendChild(cancelledBlock);
-				rotationNodes.push(cancelledBlock);
-			}
-			if (rotationNodes.length) {
-				var overlay = document.createElement('div');
-				overlay.className = 'foyer-webuntis-room-display__current-overlay';
-				overlay.setAttribute('aria-hidden', 'true');
-				rotationWrapper.appendChild(overlay);
-				body.appendChild(rotationWrapper);
-				scheduleCurrentRotation(state, data.key, rotationNodes);
-			}
-		} else {
-			var freeBlock = document.createElement('div');
-			freeBlock.className = 'foyer-webuntis-room-display__current foyer-webuntis-room-display__current--free';
-			var free = document.createElement('p');
-			free.className = 'foyer-webuntis-room-display__free';
-			free.textContent = labels.freeNow;
-			freeBlock.appendChild(free);
-			body.appendChild(freeBlock);
-		}
-
-	if (!hideUpcoming) {
-		var upcomingTitle = document.createElement('h3');
-		upcomingTitle.className = 'foyer-webuntis-room-display__section-title foyer-webuntis-room-display__section-title--upcoming';
-		upcomingTitle.textContent = labels.upcoming;
-		body.appendChild(upcomingTitle);
-
-		var upcomingEntries = Array.isArray(data.upcoming) ? data.upcoming.slice(0, 3) : [];
-		var hasUpcoming = upcomingEntries.length;
-		if (hasUpcoming) {
-			var upcomingGrid = document.createElement('div');
-			upcomingGrid.className = 'foyer-webuntis-room-display__upcoming-grid';
-			var columnCount = Math.min(3, upcomingEntries.length);
-			upcomingGrid.style.setProperty('--foyer-upcoming-columns', String(Math.max(columnCount, 1)));
-			for (var upcomingIndex = 0; upcomingIndex < upcomingEntries.length; upcomingIndex++) {
-				var upcomingEntry = upcomingEntries[upcomingIndex];
-				var upcomingBlock = buildCurrentBlock([upcomingEntry], labels, locale, timezone, !!upcomingEntry.cancelled);
-				upcomingBlock.classList.add('foyer-webuntis-room-display__upcoming-card');
-				upcomingGrid.appendChild(upcomingBlock);
-			}
-			body.appendChild(upcomingGrid);
-		} else {
-			var upcomingBlock = document.createElement('div');
-			upcomingBlock.className = 'foyer-webuntis-room-display__upcoming';
-
-			var empty = document.createElement('p');
-			empty.className = 'foyer-webuntis-room-display__empty';
-			empty.textContent = labels.noUpcoming;
-			upcomingBlock.appendChild(empty);
-
-			body.appendChild(upcomingBlock);
-		}
-	}
-			column.appendChild(body);
-			grid.appendChild(column);
-		}
-
-		applyColumnScaling(node);
-	}
+	renderTiles(grid, rooms, state.labels, {
+		formatRange: function (start, end) {
+			return formatTimeRange(start, end, state.locale, state.timezone);
+		},
+		isGenericType: isGenericLessonType
+	}, state.rooms.length, state.hideUpcoming);
+}
 
 // Show an inline error message inside the widget.
 function setError(node, message) {
@@ -989,11 +585,6 @@ function cleanupInstance(state) {
 		clearTimeout(state.clockTimer);
 		state.clockTimer = null;
 	}
-	stopAllRotations(state);
-	if (state.resizeHandler && typeof window !== 'undefined' && window.removeEventListener) {
-		window.removeEventListener('resize', state.resizeHandler);
-		state.resizeHandler = null;
-	}
 }
 
 // Render the rows the server delivered and schedule the next re-render.
@@ -1010,14 +601,7 @@ function renderPayload(node, state) {
 		clearError(node);
 		var entries = parseUntis(payload.rows || []);
 		var rooms = mergeSameBookings(buildRoomData(entries, state.rooms), function (upcoming) {
-			if (state.hideUpcoming) {
-				return [];
-			}
-			if (state.compact) {
-				var next = nextBooking(upcoming);
-				return next ? [next] : [];
-			}
-			return upcoming.slice(0, MAX_UPCOMING);
+			return shownUpcoming(upcoming, state.rooms.length, state.hideUpcoming);
 		});
 
 		var parsedLastModified = null;
@@ -1032,7 +616,7 @@ function renderPayload(node, state) {
 		}
 		state.lastUpdated = parsedLastModified;
 
-		render(node, rooms, state.labels, state.locale, state.timezone, { hideUpcoming: state.hideUpcoming, hideCurrent: state.hideCurrent, compact: state.compact }, state);
+		render(node, rooms, state);
 		startClock(node, state);
 		updateTimestamp(node, state.labels, state.locale, state.timezone, state.lastUpdated);
 	}
@@ -1072,15 +656,8 @@ function initInstance(node, payload) {
 	var labels = {
 		free: node.getAttribute('data-label-free') || 'Frei',
 		occupied: node.getAttribute('data-label-occupied') || 'Belegt',
-		current: node.getAttribute('data-label-current') || 'Aktuell',
-		upcoming: node.getAttribute('data-label-upcoming') || 'Nächste Belegungen',
 		noUpcoming: node.getAttribute('data-label-no-upcoming') || 'Keine weiteren Belegungen heute.',
-		freeNow: node.getAttribute('data-label-free-now') || 'Der Raum ist aktuell frei.',
 		updated: node.getAttribute('data-label-updated') || 'Aktualisiert um %s',
-		subject: node.getAttribute('data-label-subject') || 'Fach',
-		classes: node.getAttribute('data-label-classes') || 'Klasse(n)',
-		teachers: node.getAttribute('data-label-teachers') || 'Lehrperson(en)',
-		remarks: node.getAttribute('data-label-remarks') || 'Hinweis',
 		next: node.getAttribute('data-label-next') || 'Danach',
 		cancelled: node.getAttribute('data-label-cancelled') || 'Unterricht entfällt',
 		error: node.getAttribute('data-error-message') || 'Daten konnten nicht geladen werden.',
@@ -1097,21 +674,10 @@ function initInstance(node, payload) {
 		timer: null,
 		lastUpdated: null,
 		clockTimer: null,
-		rotationTimers: new Map(),
-		hideUpcoming: node.getAttribute('data-hide-upcoming') === '1',
-		hideCurrent: node.getAttribute('data-hide-current') === '1',
-		compact: node.getAttribute('data-compact') === '1',
-		resizeHandler: null
+		hideUpcoming: node.getAttribute('data-hide-upcoming') === '1'
 	};
 
 	instances.set(node, state);
-	if (typeof window !== 'undefined' && window.addEventListener) {
-		state.resizeHandler = function () {
-			applyColumnScaling(node);
-		};
-		window.addEventListener('resize', state.resizeHandler);
-	}
-
 	startClock(node, state);
 
 	if (!rooms.length) {

@@ -125,7 +125,7 @@ describe('Raumanzeige (Server)', () => {
   it('prüft die Konfiguration', () => {
     expect(roomConfig.safeParse({ refresh: 5 }).success).toBe(false);
     expect(roomConfig.safeParse({ source: 'ftp://untis.example/a.txt' }).success).toBe(false);
-    expect(roomConfig.parse({})).toEqual({ title: '', source: '', rooms: [], refresh: 60, hideUpcoming: false, hideCurrent: false });
+    expect(roomConfig.parse({})).toEqual({ title: '', source: '', rooms: [], refresh: 60, hideUpcoming: false });
   });
 });
 

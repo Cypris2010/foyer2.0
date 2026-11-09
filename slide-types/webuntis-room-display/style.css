@@ -1,4 +1,4 @@
-/* Room display, copied 1:1 from wp-foyer (public/css/foyer-public.css). */
+/* Room display: page frame and clock from wp-foyer (public/css/foyer-public.css), tiles below. */
 
 /* Base of a wp-foyer slide: white page, black text. */
 .foyer-slide.foyer-slide-webuntis-room-display {
@@ -67,298 +67,18 @@
 .foyer-webuntis-room-display__clock-time {
   font-size: clamp(3.2vmin, calc(1.6vw + 2.2vmin), 4.2vmin);
 }
-.foyer-webuntis-room-display__placeholder,
-.foyer-webuntis-room-display__empty,
-.foyer-webuntis-room-display__free {
+.foyer-webuntis-room-display__placeholder {
   font-size: clamp(2vmin, calc(1vw + 1.4vmin), 2.8vmin);
   line-height: 1.4;
   margin: 0;
 }
-.foyer-webuntis-room-display__column {
-  --foyer-column-scale: 1;
-  background: rgba(255, 255, 255, 0.96);
-  color: #1f2937;
-  border-radius: 2vmin;
-  padding: clamp(1.8vmin, calc(1.2vw + 1.4vmin), 3.4vmin);
-  display: flex;
-  flex-direction: column;
-  gap: clamp(1.6vmin, calc(1vw + 1.2vmin), 3vmin);
-  box-shadow: 0 1.8vmin 3.4vmin rgba(15, 23, 42, 0.12);
-  backdrop-filter: blur(7px);
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  min-width: 0;
-  height: 100%;
-}
-.foyer-webuntis-room-display__header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 1.5vmin;
-}
-.foyer-webuntis-room-display__room {
-  font-size: clamp(calc(3vmin * var(--foyer-column-scale, 1)), calc((2vw + 2vmin) * var(--foyer-column-scale, 1)), calc(5.4vmin * var(--foyer-column-scale, 1)));
-  font-weight: 700;
-  margin: 0;
-  letter-spacing: 0.02em;
-  line-height: 1.1;
-  word-break: break-word;
-  hyphens: auto;
-}
-.foyer-webuntis-room-display__status {
-  font-size: clamp(calc(1.6vmin * var(--foyer-column-scale, 1)), calc((1vw + 1vmin) * var(--foyer-column-scale, 1)), calc(2.2vmin * var(--foyer-column-scale, 1)));
-  padding: 0.4em 1.6em;
-  border-radius: 999px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  font-weight: 700;
-  background: #e2e8f0;
-  color: #1e293b;
-  align-self: flex-start;
-}
-.foyer-webuntis-room-display__status.is-free {
-  background: #bbf7d0;
-  color: #047857;
-}
-.foyer-webuntis-room-display__status.is-occupied {
-  background: #fecaca;
-  color: #b91c1c;
-}
 .foyer-webuntis-room-display__updated {
   margin: 0;
-  font-size: clamp(calc(1.6vmin * var(--foyer-column-scale, 1)), calc((0.8vw + 1.1vmin) * var(--foyer-column-scale, 1)), calc(2vmin * var(--foyer-column-scale, 1)));
+  font-size: clamp(1.6vmin, calc(0.8vw + 1.1vmin), 2vmin);
   font-weight: 600;
   letter-spacing: 0.02em;
   color: rgba(30, 41, 59, 0.7);
   text-align: right;
-}
-.foyer-webuntis-room-display__column .foyer-webuntis-room-display__updated {
-  display: none !important;
-}
-.foyer-webuntis-room-display__body {
-  display: flex;
-  flex-direction: column;
-  gap: clamp(0.9vmin, calc(0.6vw + 0.6vmin), 1.6vmin);
-  flex: 1 1 auto;
-  min-height: 0;
-}
-.foyer-webuntis-room-display__section-title {
-  margin: 0;
-  font-size: clamp(calc(1.7vmin * var(--foyer-column-scale, 1)), calc((0.9vw + 1.2vmin) * var(--foyer-column-scale, 1)), calc(2.6vmin * var(--foyer-column-scale, 1)));
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.foyer-webuntis-room-display__section-title--upcoming {
-  margin-top: clamp(0.8vmin, calc(0.6vw + 0.6vmin), 1.6vmin);
-}
-.foyer-webuntis-room-display__current {
-  display: flex;
-  flex-direction: column;
-  gap: clamp(0.8vmin, calc(0.7vw + 0.6vmin), 1.6vmin);
-  flex: 2 1 0;
-  min-height: 0;
-  padding: clamp(1.4vmin, calc(0.9vw + 1vmin), 2.2vmin);
-  border-radius: 1.6vmin;
-  background: rgba(15, 23, 42, 0.03);
-  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.06);
-}
-.foyer-webuntis-room-display__current-wrapper {
-  display: grid;
-  grid-template-columns: 1fr;
-  grid-template-rows: 1fr;
-  position: relative;
-  flex: 2 1 0;
-  min-height: 0;
-  border-radius: 1.6vmin;
-  overflow: hidden;
-}
-.foyer-webuntis-room-display__current-wrapper .foyer-webuntis-room-display__current {
-  grid-area: 1 / 1;
-  width: 100%;
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transition: opacity 0.4s ease;
-  z-index: 1;
-}
-.foyer-webuntis-room-display__current-wrapper .foyer-webuntis-room-display__current.is-visible {
-  opacity: 1;
-  visibility: visible;
-  pointer-events: auto;
-}
-.foyer-webuntis-room-display__current-overlay {
-  grid-area: 1 / 1;
-  background: #ffffff;
-  opacity: 0;
-  transition: opacity 0.4s ease;
-  pointer-events: none;
-  z-index: 2;
-  border-radius: inherit;
-}
-.foyer-webuntis-room-display__current-overlay.is-active {
-  opacity: 1;
-}
-.foyer-webuntis-room-display__current.is-cancelled {
-  background: rgba(248, 113, 113, 0.18);
-  box-shadow: inset 0 0 0 1px rgba(248, 113, 113, 0.45);
-  text-decoration: line-through;
-  text-decoration-color: rgba(153, 27, 27, 0.5);
-}
-.foyer-webuntis-room-display__current.is-cancelled .foyer-webuntis-room-display__details,
-.foyer-webuntis-room-display__current.is-cancelled .foyer-webuntis-room-display__time,
-.foyer-webuntis-room-display__current.is-cancelled .foyer-webuntis-room-display__title,
-.foyer-webuntis-room-display__current.is-cancelled .foyer-webuntis-room-display__line {
-  color: #991b1b;
-  text-decoration: line-through;
-  text-decoration-color: rgba(153, 27, 27, 0.5);
-}
-.foyer-webuntis-room-display__details {
-  display: flex;
-  flex-direction: column;
-  gap: clamp(0.6vmin, calc(0.6vw + 0.4vmin), 1.2vmin);
-  font-size: clamp(calc(1.8vmin * var(--foyer-card-scale, var(--foyer-column-scale, 1))), calc((0.9vw + 1.3vmin) * var(--foyer-card-scale, var(--foyer-column-scale, 1))), calc(2.6vmin * var(--foyer-card-scale, var(--foyer-column-scale, 1))));
-}
-.foyer-webuntis-room-display__details.is-cancelled .foyer-webuntis-room-display__line {
-  color: inherit;
-}
-.foyer-webuntis-room-display__heading {
-  display: flex;
-  flex-wrap: nowrap;
-  align-items: baseline;
-  gap: clamp(1vmin, calc(0.6vw + 0.6vmin), 1.8vmin);
-  min-width: 0;
-}
-.foyer-webuntis-room-display__column--spacious .foyer-webuntis-room-display__heading {
-  flex-wrap: wrap;
-}
-.foyer-webuntis-room-display__heading.is-cancelled {
-  flex-wrap: wrap;
-}
-.foyer-webuntis-room-display__badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  padding: 0.25em 1em;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  font-size: clamp(calc(1.5vmin * var(--foyer-column-scale, 1)), calc((0.7vw + 1.1vmin) * var(--foyer-column-scale, 1)), calc(2.3vmin * var(--foyer-column-scale, 1)));
-  white-space: nowrap;
-}
-.foyer-webuntis-room-display__badge--cancelled {
-  background: rgba(248, 113, 113, 0.18);
-  color: #991b1b;
-  box-shadow: inset 0 0 0 1px rgba(248, 113, 113, 0.45);
-}
-.foyer-webuntis-room-display__heading.is-cancelled .foyer-webuntis-room-display__badge {
-  flex: 0 0 auto;
-  align-self: flex-start;
-}
-.foyer-webuntis-room-display__heading.is-cancelled .foyer-webuntis-room-display__time {
-  flex-basis: 100%;
-}
-.foyer-webuntis-room-display__break {
-  flex: 0 0 100%;
-  height: 0;
-  margin: 0;
-  padding: 0;
-  content: '';
-}
-.foyer-webuntis-room-display__time {
-  font-size: clamp(calc(2.2vmin * var(--foyer-card-scale, var(--foyer-column-scale, 1))), calc((1.2vw + 1.6vmin) * var(--foyer-card-scale, var(--foyer-column-scale, 1))), calc(3.4vmin * var(--foyer-card-scale, var(--foyer-column-scale, 1))));
-  font-weight: 600;
-  margin: 0;
-  flex: 0 0 auto;
-  white-space: nowrap;
-}
-.foyer-webuntis-room-display__title {
-  font-size: clamp(calc(2.2vmin * var(--foyer-card-scale, var(--foyer-column-scale, 1))), calc((1.2vw + 1.6vmin) * var(--foyer-card-scale, var(--foyer-column-scale, 1))), calc(3.4vmin * var(--foyer-card-scale, var(--foyer-column-scale, 1))));
-  font-weight: 600;
-  margin: 0;
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.foyer-webuntis-room-display__column--spacious .foyer-webuntis-room-display__title {
-  overflow: visible;
-  text-overflow: initial;
-  white-space: normal;
-}
-.foyer-webuntis-room-display__line {
-  margin: 0;
-  opacity: 0.9;
-}
-.foyer-webuntis-room-display__upcoming {
-  display: flex;
-  flex-direction: column;
-  gap: clamp(0.8vmin, calc(0.7vw + 0.6vmin), 1.6vmin);
-  flex: 1 1 0;
-  min-height: 0;
-  padding: clamp(1.4vmin, calc(0.9vw + 1vmin), 2.2vmin);
-  border-radius: 1.6vmin;
-  background: rgba(15, 23, 42, 0.02);
-  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.05);
-}
-.foyer-webuntis-room-display__upcoming-grid {
-  display: grid;
-  gap: clamp(0.9vmin, calc(0.7vw + 0.6vmin), 1.6vmin);
-  grid-template-columns: repeat(var(--foyer-upcoming-columns, 1), minmax(0, 1fr));
-}
-.foyer-webuntis-room-display__upcoming-card {
-  height: 100%;
-  --foyer-card-scale: calc(var(--foyer-column-scale, 1) * 0.7);
-}
-.foyer-webuntis-room-display__list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: clamp(0.9vmin, calc(0.7vw + 0.7vmin), 1.6vmin);
-  overflow: auto;
-}
-.foyer-webuntis-room-display__list-item {
-  display: grid;
-  grid-template-columns: minmax(9vmin, 15vmin) 1fr;
-  gap: clamp(0.9vmin, calc(0.7vw + 0.7vmin), 1.6vmin);
-  padding: clamp(0.9vmin, calc(0.6vw + 0.7vmin), 1.4vmin) clamp(1vmin, calc(0.8vw + 0.8vmin), 2vmin);
-  border-radius: 1.4vmin;
-  background: rgba(15, 23, 42, 0.06);
-  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.08);
-}
-.foyer-webuntis-room-display__list-item.is-cancelled {
-  background: rgba(248, 113, 113, 0.16);
-  box-shadow: inset 0 0 0 1px rgba(248, 113, 113, 0.4);
-  text-decoration: line-through;
-  text-decoration-color: rgba(153, 27, 27, 0.5);
-}
-.foyer-webuntis-room-display__list-item.is-cancelled .foyer-webuntis-room-display__list-time,
-.foyer-webuntis-room-display__list-item.is-cancelled .foyer-webuntis-room-display__list-info,
-.foyer-webuntis-room-display__list-item.is-cancelled .foyer-webuntis-room-display__list-meta {
-  color: #991b1b;
-  text-decoration: line-through;
-  text-decoration-color: rgba(153, 27, 27, 0.5);
-}
-.foyer-webuntis-room-display__list-time {
-  font-size: clamp(calc(1.8vmin * var(--foyer-column-scale, 1)), calc((0.9vw + 1.3vmin) * var(--foyer-column-scale, 1)), calc(2.6vmin * var(--foyer-column-scale, 1)));
-  font-weight: 600;
-  white-space: nowrap;
-}
-.foyer-webuntis-room-display__list-info {
-  display: flex;
-  flex-direction: column;
-  gap: 0.8vmin;
-  font-size: clamp(calc(1.7vmin * var(--foyer-column-scale, 1)), calc((0.8vw + 1.2vmin) * var(--foyer-column-scale, 1)), calc(2.4vmin * var(--foyer-column-scale, 1)));
-}
-.foyer-webuntis-room-display__list-subject {
-  font-weight: 600;
-}
-.foyer-webuntis-room-display__list-meta {
-  opacity: 0.7;
-  font-size: clamp(calc(1.6vmin * var(--foyer-column-scale, 1)), calc((0.7vw + 1.1vmin) * var(--foyer-column-scale, 1)), calc(2vmin * var(--foyer-column-scale, 1)));
 }
 .foyer-webuntis-room-display__error {
   position: absolute;
@@ -387,28 +107,9 @@
   .foyer-webuntis-room-display__grid {
     gap: clamp(2vmin, calc(1.4vw + 1.2vmin), 3vmin);
   }
-  .foyer-webuntis-room-display__column {
-    padding: 3vmin;
-  }
-  .foyer-webuntis-room-display__room {
-    font-size: calc(6vmin * var(--foyer-column-scale, 1));
-  }
-  .foyer-webuntis-room-display__status {
-    font-size: calc(2.6vmin * var(--foyer-column-scale, 1));
-  }
-  .foyer-webuntis-room-display__section-title {
-    font-size: calc(3.1vmin * var(--foyer-column-scale, 1));
-  }
-  .foyer-webuntis-room-display__time {
-    font-size: calc(4vmin * var(--foyer-column-scale, 1));
-  }
-  .foyer-webuntis-room-display__details,
-  .foyer-webuntis-room-display__list-info {
-    font-size: calc(2.9vmin * var(--foyer-column-scale, 1));
-  }
 }
 
-/* Not from wp-foyer: heading and the tiles for three or more rooms (compact.ts). */
+/* Not from wp-foyer: heading and the tiles (tiles.ts). */
 .foyer-webuntis-room-display__page-title {
   flex: 1 1 auto;
   min-width: 0;
@@ -432,7 +133,7 @@
   min-height: 0;
   height: 100%;
   /* Sized so a tile holds all of its lines, whichever of height and width is tighter. */
-  font-size: min(3.4vmin, calc(74vh / var(--foyer-tile-rows) / 10.8), calc(90vw / var(--foyer-tile-columns) / 15));
+  font-size: min(5vmin, calc(74vh / var(--foyer-tile-rows) / 10.8), calc(90vw / var(--foyer-tile-columns) / 15));
   line-height: 1.25;
 }
 .foyer-webuntis-room-display__tile {
@@ -490,7 +191,7 @@
   white-space: nowrap;
 }
 .foyer-webuntis-room-display__tile-booking,
-.foyer-webuntis-room-display__tile-next {
+.foyer-webuntis-room-display__tile-next-row {
   display: -webkit-box;
   overflow: hidden;
   -webkit-box-orient: vertical;
@@ -523,6 +224,6 @@
   }
   .foyer-webuntis-room-display__tiles {
     grid-template-columns: repeat(var(--foyer-tile-columns-portrait), minmax(0, 1fr));
-    font-size: min(3.4vmin, calc(74vh / var(--foyer-tile-rows-portrait) / 10.8), calc(90vw / var(--foyer-tile-columns-portrait) / 15));
+    font-size: min(5vmin, calc(74vh / var(--foyer-tile-rows-portrait) / 10.8), calc(90vw / var(--foyer-tile-columns-portrait) / 15));
   }
 }
