@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { defineSlideType } from '@foyer/slide-sdk';
 
 export const config = z.object({
-  title: z.string().max(120).default('').describe('Überschrift (optional), z. B. Raumbelegung W-Bau'),
+  title: z.string().max(120).default('').describe('Überschrift (optional), z. B. W-Bau'),
   // No built-in address (KONZEPT 3.4): empty uses the WebUntis API from the settings.
   source: z
     .union([z.url({ protocol: /^https?$/ }), z.literal('')])
@@ -12,7 +12,7 @@ export const config = z.object({
     .array(z.string().min(1).max(100))
     .max(50)
     .default([])
-    .describe('Räume auf dieser Folie (ohne Auswahl wird kein Inhalt angezeigt). Ab drei Räumen erscheint eine Tabelle mit einer Zeile pro Raum.')
+    .describe('Räume auf dieser Folie (ohne Auswahl wird kein Inhalt angezeigt). Ab drei Räumen erscheinen kleinere Kacheln mit der laufenden Stunde. Räume mit gleicher Belegung werden zusammengefasst.')
     .meta({ widget: 'options', options: 'rooms' }),
   refresh: z.number().int().min(15).max(3600).default(60).describe('Aktualisierungsintervall in Sekunden (empfohlen: 30–120)'),
   hideUpcoming: z.boolean().default(false).describe('Nächste Belegungen ausblenden (nur die aktuelle Belegung anzeigen)'),

@@ -408,7 +408,7 @@
   }
 }
 
-/* Not from wp-foyer: heading and the table for three or more rooms (compact.ts). */
+/* Not from wp-foyer: heading and the tiles for three or more rooms (compact.ts). */
 .foyer-webuntis-room-display__page-title {
   flex: 1 1 auto;
   min-width: 0;
@@ -422,86 +422,98 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.foyer-webuntis-room-display__table {
-  --foyer-compact-rows: 1;
+.foyer-webuntis-room-display__tiles {
+  --foyer-tile-columns: 1;
+  --foyer-tile-rows: 1;
   display: grid;
-  grid-template-rows: auto repeat(var(--foyer-compact-rows), minmax(0, 1fr));
+  grid-template-columns: repeat(var(--foyer-tile-columns), minmax(0, 1fr));
+  grid-auto-rows: minmax(0, 1fr);
+  gap: 1.6vmin;
   min-height: 0;
   height: 100%;
+  /* Sized so a tile holds all of its lines, whichever of height and width is tighter. */
+  font-size: min(3.4vmin, calc(74vh / var(--foyer-tile-rows) / 10.8), calc(90vw / var(--foyer-tile-columns) / 15));
+  line-height: 1.25;
+}
+.foyer-webuntis-room-display__tile {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25em;
+  min-width: 0;
+  min-height: 0;
+  padding: 0.5em 0.8em;
   overflow: hidden;
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 1.6vmin;
   background: rgba(255, 255, 255, 0.96);
   box-shadow: 0 1.2vmin 2.4vmin rgba(15, 23, 42, 0.12);
+  box-sizing: border-box;
   color: #1f2937;
-  /* Two lines fit in a row, however many rooms the slide has. */
-  font-size: min(3vmin, calc(76vh / (var(--foyer-compact-rows) + 1) * 0.36));
-  line-height: 1.2;
 }
-.foyer-webuntis-room-display__line-row {
-  display: grid;
-  grid-template-columns: 12% 9% 15% minmax(0, 1fr) 14% 24%;
-  align-items: center;
-  min-height: 0;
-  overflow: hidden;
-  border-top: 1px solid rgba(15, 23, 42, 0.08);
+.foyer-webuntis-room-display__tile-header {
+  display: flex;
+  flex: none;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5em;
 }
-.foyer-webuntis-room-display__table--no-next .foyer-webuntis-room-display__line-row {
-  grid-template-columns: 15% 11% 15% minmax(0, 1fr) 20%;
+.foyer-webuntis-room-display__tile-room {
+  min-width: 0;
+  font-size: 1.35em;
+  font-weight: 800;
+  line-height: 1.15;
 }
-.foyer-webuntis-room-display__line-row--head {
-  border-top: 0;
-  background: #e8edf5;
-  color: rgba(30, 41, 59, 0.85);
-  font-size: 0.72em;
+.foyer-webuntis-room-display__tile-status {
+  flex: none;
+  padding: 0.2em 0.7em;
+  border-radius: 999px;
+  font-size: 0.68em;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
-.foyer-webuntis-room-display__cell {
+.is-free > .foyer-webuntis-room-display__tile-header .foyer-webuntis-room-display__tile-status {
+  background: #bbf7d0;
+  color: #047857;
+}
+.is-occupied > .foyer-webuntis-room-display__tile-header .foyer-webuntis-room-display__tile-status {
+  background: #fecaca;
+  color: #b91c1c;
+}
+.foyer-webuntis-room-display__tile-now {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+.foyer-webuntis-room-display__tile-time {
+  font-weight: 700;
+  white-space: nowrap;
+}
+.foyer-webuntis-room-display__tile-booking,
+.foyer-webuntis-room-display__tile-next {
   display: -webkit-box;
-  min-width: 0;
-  padding: 0.2em 0.6em;
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   line-clamp: 2;
 }
-.foyer-webuntis-room-display__line-row--head .foyer-webuntis-room-display__cell {
-  padding-block: 0.6em;
-}
-.foyer-webuntis-room-display__line-row:not(.foyer-webuntis-room-display__line-row--head) .foyer-webuntis-room-display__cell--room {
-  font-weight: 800;
-}
-.foyer-webuntis-room-display__line-row:not(.foyer-webuntis-room-display__line-row--head) .foyer-webuntis-room-display__cell--time,
-.foyer-webuntis-room-display__line-row:not(.foyer-webuntis-room-display__line-row--head) .foyer-webuntis-room-display__cell--booking {
+.foyer-webuntis-room-display__tile-booking {
   font-weight: 600;
 }
-.foyer-webuntis-room-display__cell--time {
+.foyer-webuntis-room-display__tile-teachers {
+  overflow: hidden;
+  color: rgba(30, 41, 59, 0.8);
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
-.foyer-webuntis-room-display__cell--next {
-  font-size: 0.86em;
-}
-.foyer-webuntis-room-display__pill {
-  display: inline-block;
-  padding: 0.2em 0.6em;
-  border-radius: 999px;
+.foyer-webuntis-room-display__tile-next {
+  flex: none;
+  padding-top: 0.4em;
+  border-top: 1px solid rgba(15, 23, 42, 0.1);
+  color: rgba(30, 41, 59, 0.85);
   font-size: 0.72em;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.foyer-webuntis-room-display__pill.is-free {
-  background: #bbf7d0;
-  color: #047857;
-}
-.foyer-webuntis-room-display__pill.is-occupied {
-  background: #fecaca;
-  color: #b91c1c;
 }
 @media (max-aspect-ratio: 1/1) {
-  /* Portrait: too narrow for six columns, so a room gets three lines. */
   .foyer-webuntis-room-display__page-meta:has(.foyer-webuntis-room-display__page-title) {
     flex-wrap: wrap;
   }
@@ -509,44 +521,8 @@
     order: 3;
     flex-basis: 100%;
   }
-  .foyer-webuntis-room-display__table {
-    grid-template-rows: repeat(var(--foyer-compact-rows), minmax(0, 1fr));
-    font-size: min(3vmin, calc(80vh / var(--foyer-compact-rows) * 0.22));
-  }
-  .foyer-webuntis-room-display__line-row--head {
-    display: none;
-  }
-  .foyer-webuntis-room-display__line-row,
-  .foyer-webuntis-room-display__table--no-next .foyer-webuntis-room-display__line-row {
-    grid-template-columns: 24% minmax(0, 1fr) 32%;
-    grid-template-areas:
-      'room time next'
-      'status booking next'
-      '. teachers next';
-    border-top: 0;
-    align-content: center;
-  }
-  .foyer-webuntis-room-display__table--no-next .foyer-webuntis-room-display__line-row {
-    grid-template-columns: 24% minmax(0, 1fr);
-    grid-template-areas:
-      'room time'
-      'status booking'
-      '. teachers';
-  }
-  .foyer-webuntis-room-display__line-row + .foyer-webuntis-room-display__line-row {
-    border-top: 1px solid rgba(15, 23, 42, 0.08);
-  }
-  .foyer-webuntis-room-display__cell--room { grid-area: room; }
-  .foyer-webuntis-room-display__cell--status { grid-area: status; }
-  .foyer-webuntis-room-display__cell--time { grid-area: time; }
-  .foyer-webuntis-room-display__cell--booking { grid-area: booking; }
-  .foyer-webuntis-room-display__cell--teachers { grid-area: teachers; }
-  .foyer-webuntis-room-display__cell--next {
-    grid-area: next;
-    -webkit-line-clamp: 4;
-    line-clamp: 4;
-  }
-  .foyer-webuntis-room-display__cell--next strong {
-    display: block;
+  .foyer-webuntis-room-display__tiles {
+    grid-template-columns: repeat(var(--foyer-tile-columns-portrait), minmax(0, 1fr));
+    font-size: min(3.4vmin, calc(74vh / var(--foyer-tile-rows-portrait) / 10.8), calc(90vw / var(--foyer-tile-columns-portrait) / 15));
   }
 }

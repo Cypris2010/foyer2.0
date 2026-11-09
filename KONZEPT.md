@@ -334,7 +334,7 @@ Mit JS: `foyer.onStart(() => tl.play())`, `foyer.onStop(() => tl.pause())`, `foy
 
 ### 5.6 WebUntis-Folien: 1:1-Übernahme
 
-**Grundsatz:** Raumanzeige (`webuntis-room-display`) und Lehrkräfte-Dashboard (`teacher-dashboard`) werden **verhaltens- und pixelgleich** übernommen: gleiche Optionen, Texte, Logik, DOM-Struktur, Klassennamen und CSS. Es gibt kein Redesign und keine „Verbesserung“ der Darstellung. Einzige Ausnahme: Ab drei Räumen zeigt die Raumanzeige eine Tabelle mit einer Zeile pro Raum (`compact.ts`), weil die Karten dann die laufende Stunde abschneiden; die Karten bis zwei Räume bleiben pixelgleich.
+**Grundsatz:** Raumanzeige (`webuntis-room-display`) und Lehrkräfte-Dashboard (`teacher-dashboard`) werden **verhaltens- und pixelgleich** übernommen: gleiche Optionen, Texte, Logik, DOM-Struktur, Klassennamen und CSS. Es gibt kein Redesign und keine „Verbesserung“ der Darstellung. Einzige Ausnahmen: Ab drei Räumen zeigt die Raumanzeige kleinere Kacheln (`compact.ts`), weil die Karten dann die laufende Stunde abschneiden; die Karten bis zwei Räume bleiben pixelgleich. Räume, die genau dasselbe anzeigen würden, teilen sich eine Karte oder Kachel (`same-booking.ts`), etwa Aula I und Aula II bei einer gemeinsamen Veranstaltung.
 
 **Umsetzung: Code übernehmen, nicht nachbauen**
 - Die bestehenden Dateien `webuntis-room-display.js` (1249 Zeilen) und `teacher-dashboard.js` (508 Zeilen) kommen nahezu unverändert in die Folientyp-Ordner. Geändert wird nur die Hülle: Statt globalem `MutationObserver` + `DOMContentLoaded` exportiert jedes Modul `mount(node)` / `unmount(node)`. Das sind die vorhandenen `initInstance`/`destroyInstance`, die Logik darin bleibt Zeile für Zeile gleich.

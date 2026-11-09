@@ -5,9 +5,11 @@
 //     re-renders with the latest data so "current" and "upcoming" move on,
 //   - mount/update/unmount are exported instead of the MutationObserver,
 //   - the parser reads rows instead of splitting the text,
-//   - from three rooms on, compact.ts draws a table instead of the cards.
+//   - from three rooms on, compact.ts draws smaller tiles instead of the cards,
+//   - rooms that show the same bookings share one card or tile (same-booking.ts).
 /* eslint-disable */
-import { renderCompact } from './compact.ts';
+import { nextBooking, renderCompact } from './compact.ts';
+import { mergeSameBookings } from './same-booking.ts';
 
 
 // Track per-node runtime state so timers can be cleaned up.
@@ -1007,7 +1009,16 @@ function renderPayload(node, state) {
 	} else {
 		clearError(node);
 		var entries = parseUntis(payload.rows || []);
-		var rooms = buildRoomData(entries, state.rooms);
+		var rooms = mergeSameBookings(buildRoomData(entries, state.rooms), function (upcoming) {
+			if (state.hideUpcoming) {
+				return [];
+			}
+			if (state.compact) {
+				var next = nextBooking(upcoming);
+				return next ? [next] : [];
+			}
+			return upcoming.slice(0, MAX_UPCOMING);
+		});
 
 		var parsedLastModified = null;
 		if (payload.lastModified) {
@@ -1070,9 +1081,6 @@ function initInstance(node, payload) {
 		classes: node.getAttribute('data-label-classes') || 'Klasse(n)',
 		teachers: node.getAttribute('data-label-teachers') || 'Lehrperson(en)',
 		remarks: node.getAttribute('data-label-remarks') || 'Hinweis',
-		room: node.getAttribute('data-label-room') || 'Raum',
-		time: node.getAttribute('data-label-time') || 'Zeit',
-		booking: node.getAttribute('data-label-booking') || 'Belegung',
 		next: node.getAttribute('data-label-next') || 'Danach',
 		cancelled: node.getAttribute('data-label-cancelled') || 'Unterricht entfällt',
 		error: node.getAttribute('data-error-message') || 'Daten konnten nicht geladen werden.',
