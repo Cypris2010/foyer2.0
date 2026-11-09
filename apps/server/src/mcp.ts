@@ -77,6 +77,7 @@ const TYPE_NOTES: Record<string, string> = {
 - Externe Ressourcen (Schriften, Bilder über https) nur mit allowExternal: true; sonst nur Mediathek und eingebettete Inhalte (data:-URLs, SVG, CSS-Verläufe). Netzwerkzugriffe aus JS (fetch) sind gesperrt.`,
   text: 'Gut für Ankündigungen: Dachzeile, Titel, Untertitel, Text, optional QR-Code. Platzhalter wie {{date}} und {{weekday}} gehen in den Texten. Der Text steht links in schwarzer Schrift auf halbtransparenten weißen Kästen, ein QR-Code unten rechts. Hintergrund: Farbe, Bild oder Video aus der Mediathek; Abdunkeln ist meist nicht nötig. "zoom": true zoomt ein Bild langsam hinein.',
   video: 'Zeigt ein Video aus der Mediathek (Feld mit Medien-id). Ohne Dauer läuft die Folie so lange wie das Video.',
+  website: 'Bindet eine https-Adresse im Vollbild ein. Bilddateien gehen immer; eine Webseite erscheint nur, wenn sie das Einbetten in Foyer erlaubt (frame-ancestors). refresh > 0 für Inhalte, die lange allein auf einem Display stehen.',
 };
 
 const slideSummary = (s: any) => ({ id: s.id, title: s.title, type: s.type, published: s.published, duration: s.duration, updatedAt: new Date(s.updatedAt).toISOString() });

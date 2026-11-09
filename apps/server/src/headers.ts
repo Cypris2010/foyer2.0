@@ -17,10 +17,11 @@ const PLAYER_CSP = [
   "default-src 'self'",
   "script-src 'self'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
+  // https: for website slides, which show an external page or image.
+  "img-src 'self' data: blob: https:",
   "media-src 'self' blob:",
   "connect-src 'self'",
-  "frame-src 'self'",
+  "frame-src 'self' https:",
   // The admin embeds the player for previews.
   "frame-ancestors 'self'",
   "base-uri 'none'",

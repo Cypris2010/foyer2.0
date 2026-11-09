@@ -332,6 +332,13 @@ Mit JS: `foyer.onStart(() => tl.play())`, `foyer.onStop(() => tl.pause())`, `foy
 - Größenlimit für Pakete (z. B. 20 MB) und Warnung bei großen Bildern.
 - Lottie- oder Rive-Animationen kommen als eigener Typ später. Auf dem i.MX6 erst per Probe prüfen, weil der SVG-Renderer von Lottie CPU-lastig ist.
 
+### 5.5a Folientyp „Webseite“
+
+Bindet eine https-Adresse im Vollbild ein und lädt sie auf Wunsch regelmäßig neu. Nur die Rolle `admin` darf solche Folien anlegen oder ändern. Der Player erlaubt dafür `frame-src` und `img-src` für https; Skripte und Netzwerkzugriffe des Players bleiben beim eigenen Server.
+
+- **Bilddateien** (erkannt an der Dateiendung) zeigt der Player direkt: Sie skalieren auf das Display, ein fehlgeschlagenes Neuladen lässt das letzte Bild stehen, und das Einbetten braucht keine Erlaubnis der Gegenseite.
+- **Webseiten** laufen im `<iframe>` ohne Popups und ohne Navigation des Players. Die Seite muss das Einbetten erlauben: Steht `foyer.lgsit.de` nicht in ihrem `frame-ancestors`, zeigt das Display nur die Fehlerseite des Browsers, und der Player kann das nicht erkennen.
+
 ### 5.6 WebUntis-Folien: 1:1-Übernahme
 
 **Grundsatz:** Das Lehrkräfte-Dashboard (`teacher-dashboard`) wird **verhaltens- und pixelgleich** übernommen: gleiche Optionen, Texte, Logik, DOM-Struktur, Klassennamen und CSS. Es gibt kein Redesign und keine „Verbesserung“ der Darstellung.
