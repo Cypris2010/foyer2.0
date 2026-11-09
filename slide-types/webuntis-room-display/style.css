@@ -407,3 +407,146 @@
     font-size: calc(2.9vmin * var(--foyer-column-scale, 1));
   }
 }
+
+/* Not from wp-foyer: heading and the table for three or more rooms (compact.ts). */
+.foyer-webuntis-room-display__page-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: #1f2937;
+  font-size: clamp(3.2vmin, calc(1.6vw + 2.2vmin), 4.2vmin);
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.foyer-webuntis-room-display__table {
+  --foyer-compact-rows: 1;
+  display: grid;
+  grid-template-rows: auto repeat(var(--foyer-compact-rows), minmax(0, 1fr));
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 1.6vmin;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 1.2vmin 2.4vmin rgba(15, 23, 42, 0.12);
+  color: #1f2937;
+  /* Two lines fit in a row, however many rooms the slide has. */
+  font-size: min(3vmin, calc(76vh / (var(--foyer-compact-rows) + 1) * 0.36));
+  line-height: 1.2;
+}
+.foyer-webuntis-room-display__line-row {
+  display: grid;
+  grid-template-columns: 12% 9% 15% minmax(0, 1fr) 14% 24%;
+  align-items: center;
+  min-height: 0;
+  overflow: hidden;
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+}
+.foyer-webuntis-room-display__table--no-next .foyer-webuntis-room-display__line-row {
+  grid-template-columns: 15% 11% 15% minmax(0, 1fr) 20%;
+}
+.foyer-webuntis-room-display__line-row--head {
+  border-top: 0;
+  background: #e8edf5;
+  color: rgba(30, 41, 59, 0.85);
+  font-size: 0.72em;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.foyer-webuntis-room-display__cell {
+  display: -webkit-box;
+  min-width: 0;
+  padding: 0.2em 0.6em;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+.foyer-webuntis-room-display__line-row--head .foyer-webuntis-room-display__cell {
+  padding-block: 0.6em;
+}
+.foyer-webuntis-room-display__line-row:not(.foyer-webuntis-room-display__line-row--head) .foyer-webuntis-room-display__cell--room {
+  font-weight: 800;
+}
+.foyer-webuntis-room-display__line-row:not(.foyer-webuntis-room-display__line-row--head) .foyer-webuntis-room-display__cell--time,
+.foyer-webuntis-room-display__line-row:not(.foyer-webuntis-room-display__line-row--head) .foyer-webuntis-room-display__cell--booking {
+  font-weight: 600;
+}
+.foyer-webuntis-room-display__cell--time {
+  white-space: nowrap;
+}
+.foyer-webuntis-room-display__cell--next {
+  font-size: 0.86em;
+}
+.foyer-webuntis-room-display__pill {
+  display: inline-block;
+  padding: 0.2em 0.6em;
+  border-radius: 999px;
+  font-size: 0.72em;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.foyer-webuntis-room-display__pill.is-free {
+  background: #bbf7d0;
+  color: #047857;
+}
+.foyer-webuntis-room-display__pill.is-occupied {
+  background: #fecaca;
+  color: #b91c1c;
+}
+@media (max-aspect-ratio: 1/1) {
+  /* Portrait: too narrow for six columns, so a room gets three lines. */
+  .foyer-webuntis-room-display__page-meta:has(.foyer-webuntis-room-display__page-title) {
+    flex-wrap: wrap;
+  }
+  .foyer-webuntis-room-display__page-title {
+    order: 3;
+    flex-basis: 100%;
+  }
+  .foyer-webuntis-room-display__table {
+    grid-template-rows: repeat(var(--foyer-compact-rows), minmax(0, 1fr));
+    font-size: min(3vmin, calc(80vh / var(--foyer-compact-rows) * 0.22));
+  }
+  .foyer-webuntis-room-display__line-row--head {
+    display: none;
+  }
+  .foyer-webuntis-room-display__line-row,
+  .foyer-webuntis-room-display__table--no-next .foyer-webuntis-room-display__line-row {
+    grid-template-columns: 24% minmax(0, 1fr) 32%;
+    grid-template-areas:
+      'room time next'
+      'status booking next'
+      '. teachers next';
+    border-top: 0;
+    align-content: center;
+  }
+  .foyer-webuntis-room-display__table--no-next .foyer-webuntis-room-display__line-row {
+    grid-template-columns: 24% minmax(0, 1fr);
+    grid-template-areas:
+      'room time'
+      'status booking'
+      '. teachers';
+  }
+  .foyer-webuntis-room-display__line-row + .foyer-webuntis-room-display__line-row {
+    border-top: 1px solid rgba(15, 23, 42, 0.08);
+  }
+  .foyer-webuntis-room-display__cell--room { grid-area: room; }
+  .foyer-webuntis-room-display__cell--status { grid-area: status; }
+  .foyer-webuntis-room-display__cell--time { grid-area: time; }
+  .foyer-webuntis-room-display__cell--booking { grid-area: booking; }
+  .foyer-webuntis-room-display__cell--teachers { grid-area: teachers; }
+  .foyer-webuntis-room-display__cell--next {
+    grid-area: next;
+    -webkit-line-clamp: 4;
+    line-clamp: 4;
+  }
+  .foyer-webuntis-room-display__cell--next strong {
+    display: block;
+  }
+}

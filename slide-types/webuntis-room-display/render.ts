@@ -1,5 +1,6 @@
 import { defineRenderer } from '@foyer/slide-sdk';
 import type { RoomDisplayConfig, RoomDisplayData } from './index.ts';
+import { COMPACT_FROM_ROOMS } from './compact.ts';
 import { mount, unmount, update } from './legacy.js';
 
 // Markup and labels of the wp-foyer template (webuntis-room-display.php).
@@ -15,6 +16,10 @@ const LABELS: Record<string, string> = {
   'label-classes': 'Klasse(n)',
   'label-teachers': 'Lehrperson(en)',
   'label-remarks': 'Hinweis',
+  'label-room': 'Raum',
+  'label-time': 'Zeit',
+  'label-booking': 'Belegung',
+  'label-next': 'Danach',
   'error-message': 'Daten konnten nicht geladen werden.',
   'error-no-rooms': 'Bitte wählen Sie mindestens einen Raum in den Folieneinstellungen aus.',
 };
@@ -45,10 +50,17 @@ export default defineRenderer<RoomDisplayConfig, RoomDisplayData>((root, { confi
     timezone: ctx.timeZone,
     'hide-upcoming': config.hideUpcoming ? '1' : '0',
     'hide-current': config.hideCurrent ? '1' : '0',
+    compact: config.rooms.length >= COMPACT_FROM_ROOMS ? '1' : '0',
     ...LABELS,
   };
   for (const [name, value] of Object.entries(attrs)) node.setAttribute(`data-${name}`, value);
   node.innerHTML = TEMPLATE;
+  if (config.title) {
+    const title = document.createElement('h1');
+    title.className = 'foyer-webuntis-room-display__page-title';
+    title.textContent = config.title;
+    node.querySelector('.foyer-webuntis-room-display__clock')?.after(title);
+  }
   root.appendChild(node);
   mount(node, data);
 

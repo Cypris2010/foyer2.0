@@ -4,8 +4,10 @@
 //     filtered to the slide's rooms) instead of fetch(); the refresh timer
 //     re-renders with the latest data so "current" and "upcoming" move on,
 //   - mount/update/unmount are exported instead of the MutationObserver,
-//   - the parser reads rows instead of splitting the text.
+//   - the parser reads rows instead of splitting the text,
+//   - from three rooms on, compact.ts draws a table instead of the cards.
 /* eslint-disable */
+import { renderCompact } from './compact.ts';
 
 
 // Track per-node runtime state so timers can be cleaned up.
@@ -830,6 +832,16 @@ function render(node, rooms, labels, locale, timezone, options, state) {
 	var hideUpcoming = options && options.hideUpcoming;
 	var hideCurrent = options && options.hideCurrent;
 
+	if (options && options.compact) {
+		renderCompact(grid, rooms, labels, {
+			formatRange: function (start, end) {
+				return formatTimeRange(start, end, locale, timezone);
+			},
+			isGenericType: isGenericLessonType
+		}, !!hideUpcoming);
+		return;
+	}
+
 	for (var i = 0; i < rooms.length; i++) {
 		var data = rooms[i];
 		var currentEntries = Array.isArray(data.current) ? data.current.slice() : (data.current ? [data.current] : []);
@@ -1009,7 +1021,7 @@ function renderPayload(node, state) {
 		}
 		state.lastUpdated = parsedLastModified;
 
-		render(node, rooms, state.labels, state.locale, state.timezone, { hideUpcoming: state.hideUpcoming, hideCurrent: state.hideCurrent }, state);
+		render(node, rooms, state.labels, state.locale, state.timezone, { hideUpcoming: state.hideUpcoming, hideCurrent: state.hideCurrent, compact: state.compact }, state);
 		startClock(node, state);
 		updateTimestamp(node, state.labels, state.locale, state.timezone, state.lastUpdated);
 	}
@@ -1058,6 +1070,10 @@ function initInstance(node, payload) {
 		classes: node.getAttribute('data-label-classes') || 'Klasse(n)',
 		teachers: node.getAttribute('data-label-teachers') || 'Lehrperson(en)',
 		remarks: node.getAttribute('data-label-remarks') || 'Hinweis',
+		room: node.getAttribute('data-label-room') || 'Raum',
+		time: node.getAttribute('data-label-time') || 'Zeit',
+		booking: node.getAttribute('data-label-booking') || 'Belegung',
+		next: node.getAttribute('data-label-next') || 'Danach',
 		cancelled: node.getAttribute('data-label-cancelled') || 'Unterricht entfällt',
 		error: node.getAttribute('data-error-message') || 'Daten konnten nicht geladen werden.',
 		noRooms: node.getAttribute('data-error-no-rooms') || 'Bitte wählen Sie mindestens einen Raum aus.'
@@ -1076,6 +1092,7 @@ function initInstance(node, payload) {
 		rotationTimers: new Map(),
 		hideUpcoming: node.getAttribute('data-hide-upcoming') === '1',
 		hideCurrent: node.getAttribute('data-hide-current') === '1',
+		compact: node.getAttribute('data-compact') === '1',
 		resizeHandler: null
 	};
 
