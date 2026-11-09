@@ -12,7 +12,29 @@ export interface BackgroundControl {
 
 const NONE: BackgroundControl = { prepare() {}, start() {}, stop() {}, destroy() {} };
 
-export function mountBackground(slideEl: HTMLElement, background: Background | null, onError: (message: string) => void): BackgroundControl {
+/** Slow zoom over the whole slide, as in wp-foyer. */
+const ZOOM_SCALE = 1.15;
+
+function zoomControl(img: HTMLImageElement, seconds: number): BackgroundControl {
+  const reset = () => {
+    img.style.transition = 'none';
+    img.style.transform = 'scale(1)';
+  };
+  reset();
+  return {
+    prepare: reset,
+    start() {
+      reset();
+      void img.offsetWidth; // Applies the start state, or nothing would animate.
+      img.style.transition = `transform ${seconds}s ease-in-out`;
+      img.style.transform = `scale(${ZOOM_SCALE})`;
+    },
+    stop: reset,
+    destroy() {},
+  };
+}
+
+export function mountBackground(slideEl: HTMLElement, background: Background | null, seconds: number, onError: (message: string) => void): BackgroundControl {
   if (!background) return NONE;
   if (background.kind === 'color') {
     slideEl.style.background = background.value;
@@ -37,7 +59,7 @@ export function mountBackground(slideEl: HTMLElement, background: Background | n
     img.decoding = 'async';
     img.src = background.url;
     layer.insertBefore(img, layer.firstChild);
-    return NONE;
+    return background.zoom ? zoomControl(img, seconds) : NONE;
   }
 
   const video = document.createElement('video');

@@ -1,31 +1,75 @@
+/* The design of the wp-foyer text slide as it runs live: black text on translucent
+   white boxes at the bottom left of a full-screen background, in the font of its
+   WordPress theme (bundled, as displays may have no internet). Imported slides
+   look as they did. Only the subsets for names in European languages: the package's
+   own CSS also has a subset small enough to be inlined, which the player's CSP blocks. */
+@font-face {
+  font-family: 'Manrope Variable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 800;
+  src: url('@fontsource-variable/manrope/files/manrope-latin-ext-wght-normal.woff2') format('woff2-variations');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Manrope Variable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 800;
+  src: url('@fontsource-variable/manrope/files/manrope-latin-wght-normal.woff2') format('woff2-variations');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+.foyer-slide--text { background: #fff; }
 .foyer-text {
   position: absolute;
   top: 0; right: 0; bottom: 0; left: 0;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8vmin;
-  color: #fff;
-  text-shadow: 0 0.2vmin 0.8vmin rgba(0, 0, 0, 0.35);
+  align-items: flex-end;
+  color: #000;
+  font-family: 'Manrope Variable', Manrope, system-ui, sans-serif;
 }
-.foyer-text__body { max-width: 75%; }
-.foyer-text__pretitle { font-size: 3rem; opacity: 0.85; margin-bottom: 1rem; }
-.foyer-text__title { font-size: 6rem; line-height: 1.05; margin: 0 0 1.5rem; font-weight: 700; }
-.foyer-text__subtitle { font-size: 3.5rem; margin-bottom: 2rem; }
-.foyer-text__content { font-size: 2.5rem; line-height: 1.4; white-space: pre-line; }
-.foyer-text__qr {
+.foyer-text__body {
+  box-sizing: border-box;
   flex: 0 0 auto;
-  width: 22vmin;
-  height: 22vmin;
-  padding: 1.5vmin;
-  background: #fff;
-  border-radius: 1vmin;
+  width: 66.6667%;
+  padding: 4vmin;
 }
+.foyer-text__pretitle,
+.foyer-text__subtitle { font-size: 3rem; font-weight: 700; line-height: 1.2; margin: 0 0 1rem; }
+.foyer-text__title { font-size: 5rem; font-weight: 700; line-height: 1.2; margin: 0 0 1rem; }
+.foyer-text__pretitle span,
+.foyer-text__title span,
+.foyer-text__subtitle span {
+  padding: 0.5rem 1rem;
+  background-color: rgba(255, 255, 255, 0.8);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+.foyer-text__title span { line-height: 1.5; }
+.foyer-text__pretitle span,
+.foyer-text__subtitle span { line-height: 1.7; }
+.foyer-text__content {
+  font-size: 2rem;
+  font-weight: 300;
+  line-height: 1.5;
+  padding: 1.5rem 1rem;
+  background-color: rgba(255, 255, 255, 0.8);
+  white-space: pre-line;
+}
+.foyer-text__qr {
+  position: absolute;
+  right: 4vmin;
+  bottom: 4vmin;
+  padding: 2vmin;
+  background-color: rgba(255, 255, 255, 0.8);
+}
+.foyer-text__qr svg { display: block; width: 30vmin; height: 30vmin; }
 /* Codes with a motif have more, smaller modules. */
-.foyer-text__qr--art { width: 34vmin; height: 34vmin; }
-.foyer-text__qr svg { display: block; width: 100%; height: 100%; }
+.foyer-text__qr--art svg { width: 38vmin; height: 38vmin; }
 @media (max-aspect-ratio: 1/1) {
-  .foyer-text { flex-direction: column; justify-content: center; text-align: center; }
-  .foyer-text__body { max-width: 100%; }
-  .foyer-text__qr { margin-top: 4vmin; }
+  .foyer-text__body { width: 100%; }
+  /* The text sits at the bottom and is as wide as the screen: keep it clear of the code. */
+  .foyer-text--qr { padding-bottom: 34vmin; }
+  .foyer-text--qr-art { padding-bottom: 42vmin; }
 }

@@ -111,6 +111,21 @@ docker compose -f deploy/compose.yaml exec foyer node apps/server/src/cli.ts use
 - **Ohne Live-Folien** den Dienst `live-gateway` und `FOYER_LIVE_GATEWAY` aus der Compose-Datei nehmen.
 - **Gateway im AV-Netz:** Auf dem Rechner dort `deploy/live-gateway.compose.yaml` starten (gleiche `deploy/.env`), auf dem Foyer-Server den Dienst `live-gateway` entfernen und `FOYER_LIVE_GATEWAY=http://<gateway>:8190` setzen. 8190 per Firewall nur für den Foyer-Server öffnen.
 
+**Import aus wp-foyer.** `wp:import` übernimmt Text-, Bild- und Videofolien samt ihrer Bilder und Videos aus einer WordPress-Exportdatei. Die Datei entsteht im alten Admin unter *Werkzeuge → Daten exportieren → Alle Inhalte*. Ohne `--apply` ist es ein Trockenlauf, der nichts ändert.
+
+```bash
+docker compose -f deploy/compose.yaml cp export.xml foyer:/tmp/wp-export.xml
+docker compose -f deploy/compose.yaml exec foyer node apps/server/src/cli.ts wp:import /tmp/wp-export.xml
+docker compose -f deploy/compose.yaml exec foyer node apps/server/src/cli.ts wp:import /tmp/wp-export.xml --apply
+```
+
+- Die Bilder und Videos lädt der Import von der alten Website, die also erreichbar sein muss; mit `--uploads <ordner|url>` kommen sie von woanders. Die Exportdatei enthält Namen und E-Mail-Adressen der WordPress-Konten und gehört nicht ins Repository.
+- `--only-text` übernimmt nur Textfolien mit Bild oder ohne Hintergrund. Standardfolien und Videos kommen dann mit einem späteren Lauf ohne diesen Schalter.
+- Die seitenweite Zoom-Einstellung steht nicht im Export. Nur Folien, die den Zoom selbst einschalten, zoomen nach dem Import.
+- Die Folien werden **nicht eingeplant** und laufen erst, wenn sie im Kalender stehen. Entwürfe kommen unveröffentlicht.
+- Ein weiterer Lauf übernimmt nur Neues; in Foyer geänderte Folien bleiben unberührt, in Foyer gelöschte kommen wieder.
+- Nicht übernommen werden YouTube-Folien und die Typen Webseite, Beitrag, RSS, Raumanzeige und Lehrkräfte-Dashboard; der Bericht nennt jede einzelne Folie.
+
 **NDI als Live-Quelle (optional).** Das normale ffmpeg kann kein NDI mehr: Die ffmpeg-Entwickler haben den NDI-Baustein 2019 entfernt, und das NDI-SDK ist proprietär. Deshalb baut [`deploy/ffmpeg-ndi/build.sh`](deploy/ffmpeg-ndi/build.sh) im Gateway-Image ein **zweites** ffmpeg nach `/opt/ffmpeg-ndi`: ffmpeg 5.1 mit dem Community-Patch [lplassman/FFMPEG-NDI](https://github.com/lplassman/FFMPEG-NDI) (auf einen Commit festgelegt) und dem NDI-SDK 6. Die Umwandlung anderer Quellen nutzt weiter das normale ffmpeg; bricht der NDI-Build, ist nur NDI betroffen.
 
 ```bash

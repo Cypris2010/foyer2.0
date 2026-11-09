@@ -12,7 +12,7 @@ const dim = z.number().int().min(0).max(80).default(0);
 export const backgroundSchema = z
   .discriminatedUnion('kind', [
     z.object({ kind: z.literal('color'), value: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Farbe als #rrggbb') }),
-    z.object({ kind: z.literal('image'), mediaId: z.string().min(1).max(64), fit: z.enum(['cover', 'contain']).default('cover'), dim }),
+    z.object({ kind: z.literal('image'), mediaId: z.string().min(1).max(64), fit: z.enum(['cover', 'contain']).default('cover'), dim, zoom: z.boolean().default(false) }),
     z.object({ kind: z.literal('video'), mediaId: z.string().min(1).max(64), dim }),
   ])
   .nullable()
@@ -22,7 +22,7 @@ export type Background = z.infer<typeof backgroundSchema>;
 
 export type ManifestBackground =
   | { kind: 'color'; value: string }
-  | { kind: 'image'; url: string; fit: 'cover' | 'contain'; dim: number }
+  | { kind: 'image'; url: string; fit: 'cover' | 'contain'; dim: number; zoom: boolean }
   | { kind: 'video'; url: string; poster: string | null; dim: number };
 
 /** Checks a background against the slide type and the media library; returns an error text. */
@@ -55,7 +55,7 @@ export function resolveBackground(ctx: AppContext, stored: unknown, quality: Vid
   if (!media || media.status !== 'ready' || media.kind !== background.kind) return null;
   const variant = pickVariant(media.variants_json, quality);
   if (!variant) return null;
-  if (background.kind === 'image') return { kind: 'image', url: mediaUrl(variant.file), fit: background.fit, dim: background.dim };
+  if (background.kind === 'image') return { kind: 'image', url: mediaUrl(variant.file), fit: background.fit, dim: background.dim, zoom: background.zoom };
   return { kind: 'video', url: mediaUrl(variant.file), poster: media.poster ? mediaUrl(media.poster) : null, dim: background.dim };
 }
 

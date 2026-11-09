@@ -2,7 +2,7 @@
 import type { MediaInfo } from '@foyer/slide-sdk';
 export type Background =
   | { kind: 'color'; value: string }
-  | { kind: 'image'; url: string; fit: 'cover' | 'contain'; dim: number }
+  | { kind: 'image'; url: string; fit: 'cover' | 'contain'; dim: number; zoom: boolean }
   | { kind: 'video'; url: string; poster: string | null; dim: number };
 
 export interface ManifestSlide {

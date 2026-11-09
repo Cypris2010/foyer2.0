@@ -3,6 +3,9 @@
 //   apikey:create <email> [name]        personal API key, e.g. for an AI assistant (MCP)
 //   demo:seed                           demo channel, slides and display; prints the player URL
 //   test:seed [--reset]                 test accounts + demo content + two displays (local testing only)
+//   wp:import <file.xml> [--apply] [--only-text] [--uploads DIR|URL]
+//                                       slides and media from a WordPress export of wp-foyer;
+//                                       a dry run without --apply
 import { createInterface } from 'node:readline/promises';
 import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -128,12 +131,52 @@ async function seedTest() {
   console.log(`Admin: http://127.0.0.1:${config.port}/admin/`);
 }
 
+async function importWordPress() {
+  const option = (name: string) => {
+    const at = args.indexOf(`--${name}`);
+    return at >= 0 ? args[at + 1] : undefined;
+  };
+  const file = args[0];
+  if (!file || file.startsWith('--')) throw new Error('Exportdatei fehlt: wp:import <datei.xml> [--apply] [--only-text] [--uploads ORDNER|URL]');
+  const apply = args.includes('--apply');
+  const { readFile } = await import('node:fs/promises');
+  const { readWordPressExport } = await import('./wp-export.ts');
+  const { planImport, runImport, wpFiles } = await import('./wp-import.ts');
+  const { MediaLibrary } = await import('./media.ts');
+  const { loadRegistry } = await import('./registry.ts');
+
+  const data = readWordPressExport(await readFile(file, 'utf8'));
+  const uploads = option('uploads') ?? data.uploadsUrl;
+  console.log(`${data.slides.length} Folien gelesen. Dateien aus: ${uploads}`);
+  // Without resume(): items still queued belong to the running server.
+  const media = new MediaLibrary(db, { dir: join(config.dataDir, 'media'), ffmpeg: config.ffmpeg, ffprobe: config.ffprobe, maxBytes: config.mediaMaxMb * 1048576 });
+  const registry = await loadRegistry(config.slideTypesDir);
+  const plan = planImport(data, { onlyText: args.includes('--only-text') });
+  const result = await runImport({ db, registry, media, now: () => Date.now() }, plan, wpFiles(uploads), { apply, onProgress: (text) => console.log(text) });
+
+  const list = (title: string, lines: string[]) => {
+    if (!lines.length) return;
+    console.log(`\n${title} (${lines.length}):`);
+    for (const line of lines) console.log(`  ${line}`);
+  };
+  list('Nicht übernommen', result.skipped.map((s) => `#${s.wpId} ${s.title}: ${s.reason}`));
+  list('Hinweise', result.warnings.map((w) => `#${w.wpId} ${w.title}: ${w.warning}`));
+  list('Fehlgeschlagen', result.failed.map((f) => `#${f.wpId} ${f.title}: ${f.error}`));
+  list('Medien nicht umwandelbar', result.mediaFailed.map((m) => `${m.name}: ${m.error}`));
+  console.log('');
+  console.log(`${apply ? 'Angelegt' : 'Würde anlegen'}: ${result.created.length} Folien, ${result.files} Dateien ${apply ? 'kopiert' : 'zu kopieren'}`);
+  console.log(`Schon importiert: ${result.alreadyImported} | Nicht übernommen: ${result.skipped.length} | Fehlgeschlagen: ${result.failed.length}`);
+  console.log(apply ? 'Die Folien sind nicht eingeplant und laufen erst, wenn sie im Kalender stehen.' : 'Trockenlauf: Nichts wurde geändert. Mit --apply wirklich importieren.');
+  if (result.failed.length || result.mediaFailed.length) process.exitCode = 1;
+}
+
 try {
   if (command === 'user:create') await createUser();
   else if (command === 'apikey:create') createKey();
   else if (command === 'demo:seed') seedDemo();
   else if (command === 'test:seed') await seedTest();
-  else console.log('Befehle: user:create <email> <name> <role> | apikey:create <email> [name] | demo:seed | test:seed [--reset]');
+  else if (command === 'wp:import') await importWordPress();
+  else console.log('Befehle: user:create <email> <name> <role> | apikey:create <email> [name] | demo:seed | test:seed [--reset] | wp:import <datei.xml> [--apply] [--only-text] [--uploads DIR|URL]');
 } catch (err) {
   console.error((err as Error).message);
   process.exitCode = 1;

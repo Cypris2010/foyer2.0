@@ -18,8 +18,8 @@ function BackgroundEditor({ allowed, value, user, disabled, onChange, onError }:
   const choose = (kind: 'none' | keyof typeof BACKGROUND_LABEL) => {
     if (kind === 'none') return onChange(null);
     if (kind === 'color') return onChange({ kind: 'color', value: value?.kind === 'color' ? value.value : '#0f172a' });
-    const dim = value && value.kind !== 'color' ? value.dim : 30;
-    if (kind === 'image') return onChange({ kind: 'image', mediaId: '', fit: 'cover', dim });
+    const dim = value && value.kind !== 'color' ? value.dim : 0;
+    if (kind === 'image') return onChange({ kind: 'image', mediaId: '', fit: 'cover', dim, zoom: false });
     onChange({ kind: 'video', mediaId: '', dim });
   };
   const current = value?.kind ?? 'none';
@@ -50,13 +50,19 @@ function BackgroundEditor({ allowed, value, user, disabled, onChange, onError }:
             onChange={(mediaId) => (mediaId ? onChange({ ...value, mediaId }) : onChange(null))}
           />
           {value.kind === 'image' && (
-            <label className="field">
-              <span>Darstellung</span>
-              <select value={value.fit} disabled={disabled} onChange={(e) => onChange({ ...value, fit: e.target.value as 'cover' | 'contain' })}>
-                <option value="cover">Bildschirm füllen (Ränder werden abgeschnitten)</option>
-                <option value="contain">Ganz zeigen (mit Rand)</option>
-              </select>
-            </label>
+            <>
+              <label className="field">
+                <span>Darstellung</span>
+                <select value={value.fit} disabled={disabled} onChange={(e) => onChange({ ...value, fit: e.target.value as 'cover' | 'contain' })}>
+                  <option value="cover">Bildschirm füllen (Ränder werden abgeschnitten)</option>
+                  <option value="contain">Ganz zeigen (mit Rand)</option>
+                </select>
+              </label>
+              <label className="field field--inline">
+                <input type="checkbox" checked={value.zoom === true} disabled={disabled} onChange={(e) => onChange({ ...value, zoom: e.target.checked })} />
+                <span>Langsam hineinzoomen</span>
+              </label>
+            </>
           )}
           <label className="field">
             <span>Abdunkeln für bessere Lesbarkeit: {value.dim} %</span>

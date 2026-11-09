@@ -47,7 +47,7 @@ export interface Channel {
 
 export type Background =
   | { kind: 'color'; value: string }
-  | { kind: 'image'; mediaId: string; fit: 'cover' | 'contain'; dim: number }
+  | { kind: 'image'; mediaId: string; fit: 'cover' | 'contain'; dim: number; zoom?: boolean }
   | { kind: 'video'; mediaId: string; dim: number };
 
 export interface Slide {

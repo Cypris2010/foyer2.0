@@ -19,12 +19,20 @@ export default defineRenderer<TextConfig, TextData>((root, { config, data, ctx }
     if (!value) continue;
     const node = document.createElement(name === 'title' ? 'h1' : 'div');
     node.className = `foyer-text__${name}`;
-    node.textContent = fill(value);
+    if (name === 'content') {
+      node.textContent = fill(value);
+    } else {
+      // Inline, so the white box follows each line of the text (as in wp-foyer).
+      const line = document.createElement('span');
+      line.textContent = fill(value);
+      node.appendChild(line);
+    }
     body.appendChild(node);
   }
   container.appendChild(body);
 
   if (data?.qrSvg) {
+    container.classList.add(data.qrArt ? 'foyer-text--qr-art' : 'foyer-text--qr');
     const qr = document.createElement('div');
     qr.className = data.qrArt ? 'foyer-text__qr foyer-text__qr--art' : 'foyer-text__qr';
     // Server-generated SVG from the qrcode library, not user HTML.

@@ -165,7 +165,12 @@ describe.skipIf(!hasFfmpeg)('Mediathek', () => {
     expect(ok.status).toBe(200);
 
     const manifest = await (await app.request(`/api/player/${token}/manifest`)).json();
-    expect(manifest.slides[0].background).toEqual({ kind: 'image', url: expect.stringMatching(/^\/media\/.+-img1\.jpg$/), fit: 'cover', dim: 30 });
+    expect(manifest.slides[0].background).toEqual({ kind: 'image', url: expect.stringMatching(/^\/media\/.+-img1\.jpg$/), fit: 'cover', dim: 30, zoom: false });
+
+    const zoomed = await app.request('/api/slides/s-text', json('PUT', { ...slide, background: { kind: 'image', mediaId: image.id, zoom: true } }, cookie));
+    expect(zoomed.status).toBe(200);
+    const zoomedManifest = await (await app.request(`/api/player/${token}/manifest`)).json();
+    expect(zoomedManifest.slides[0].background.zoom).toBe(true);
 
     const list = await (await app.request('/api/media', { headers: { cookie } })).json();
     expect(list[0].usageCount).toBe(1);

@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@fontsource-variable/manrope": "5.3.0",
     "@foyer/qr-art": "*",
     "@foyer/slide-sdk": "*",
     "qrcode": "^1.5.4",

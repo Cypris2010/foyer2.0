@@ -75,7 +75,7 @@ const TYPE_NOTES: Record<string, string> = {
 - Animationen: <html> bekommt die Klasse "foyer-active", sobald die Folie sichtbar wird, z. B. ".foyer-active .titel { animation: … }". In JS: foyer.onStart(fn), foyer.onStop(fn), foyer.done() (mit durationMode "done").
 - Medien aus der Mediathek: {{media:<id>}} wird zur Adresse der Datei, in HTML, CSS und JS, z. B. <img src="{{media:…}}">, <video src="{{media:…}}" autoplay muted loop playsinline> oder background-image: url({{media:…}}). Bilder dafür mit list_media oder search_stock_media + import_stock_media holen. Bildnachweise zeigen die Displays automatisch.
 - Externe Ressourcen (Schriften, Bilder über https) nur mit allowExternal: true; sonst nur Mediathek und eingebettete Inhalte (data:-URLs, SVG, CSS-Verläufe). Netzwerkzugriffe aus JS (fetch) sind gesperrt.`,
-  text: 'Gut für Ankündigungen: Dachzeile, Titel, Untertitel, Text, optional QR-Code. Platzhalter wie {{date}} und {{weekday}} gehen in den Texten. Hintergrund: Farbe, Bild oder Video aus der Mediathek (mit "dim" abdunkeln, damit Text lesbar bleibt).',
+  text: 'Gut für Ankündigungen: Dachzeile, Titel, Untertitel, Text, optional QR-Code. Platzhalter wie {{date}} und {{weekday}} gehen in den Texten. Der Text steht links in schwarzer Schrift auf halbtransparenten weißen Kästen, ein QR-Code unten rechts. Hintergrund: Farbe, Bild oder Video aus der Mediathek; Abdunkeln ist meist nicht nötig. "zoom": true zoomt ein Bild langsam hinein.',
   video: 'Zeigt ein Video aus der Mediathek (Feld mit Medien-id). Ohne Dauer läuft die Folie so lange wie das Video.',
 };
 
@@ -232,7 +232,7 @@ const TOOLS: Tool[] = [
         .record(z.string(), z.unknown())
         .nullable()
         .default(null)
-        .describe('Nur bei Typen mit backgrounds: {"kind":"color","value":"#1e3a8a"}, {"kind":"image","mediaId":"…","fit":"cover","dim":0-80} oder {"kind":"video","mediaId":"…","dim":0-80}'),
+        .describe('Nur bei Typen mit backgrounds: {"kind":"color","value":"#1e3a8a"}, {"kind":"image","mediaId":"…","fit":"cover","dim":0-80,"zoom":false} oder {"kind":"video","mediaId":"…","dim":0-80}'),
       duration: z.number().int().min(1).max(86400).nullable().default(null).describe('Sekunden; null = Standard des Channels'),
       published: z.boolean().default(true),
     }),

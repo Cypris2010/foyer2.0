@@ -201,6 +201,16 @@ const migrations: Array<string | ((db: DatabaseSync) => void)> = [
   `
   ALTER TABLE displays ADD COLUMN video_quality TEXT NOT NULL DEFAULT 'main' CHECK (video_quality IN ('main', 'sd'));
   `,
+  // What wp:import has taken over, so that running it again adds only what is new.
+  `
+  CREATE TABLE wp_import_map (
+    entity TEXT NOT NULL CHECK (entity IN ('slide', 'attachment')),
+    wp_id INTEGER NOT NULL,
+    foyer_id TEXT NOT NULL,
+    at INTEGER NOT NULL,
+    PRIMARY KEY (entity, wp_id)
+  );
+  `,
 ];
 
 export type Db = DatabaseSync;

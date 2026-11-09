@@ -322,7 +322,7 @@ export class Ticker {
     const el = document.createElement('div');
     el.className = `foyer-slide foyer-slide--${slide.type}`;
     this.stage.appendChild(el);
-    const background = mountBackground(el, slide.background, (message) => this.hooks.onError(`${slide.title}: ${message}`));
+    const background = mountBackground(el, slide.background, slide.duration, (message) => this.hooks.onError(`${slide.title}: ${message}`));
 
     const ctx: PlayerContext = {
       locale: this.manifest.settings.locale,

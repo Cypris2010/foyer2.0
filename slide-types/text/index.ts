@@ -3,7 +3,7 @@ import { defineSlideType } from '@foyer/slide-sdk';
 import { ICON_NAMES, MAX_TEXT } from '@foyer/qr-art';
 
 export const config = z.object({
-  pretitle: z.string().max(200).default('').describe('Dachzeile'),
+  pretitle: z.string().max(300).default('').describe('Dachzeile'),
   title: z.string().max(300).default('').describe('Titel'),
   subtitle: z.string().max(300).default('').describe('Untertitel'),
   content: z.string().max(5000).default('').describe('Text').meta({ widget: 'textarea' }),
