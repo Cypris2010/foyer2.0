@@ -1,8 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 import { securityHeaders } from '../apps/server/src/headers.ts';
 import { config } from '../slide-types/website/index.ts';
 import { freshUrl, isImageUrl } from '../slide-types/website/url.ts';
+import { createRefresh } from '../slide-types/website/refresh.ts';
 
 const LIBRENMS = 'https://bigbrother2.lgsit.de/dashboard/1.png';
 
@@ -25,6 +26,45 @@ describe('website slide', () => {
   it('asks for a fresh image and keeps the query', () => {
     expect(freshUrl(LIBRENMS, 42)).toBe(`${LIBRENMS}?foyer=42`);
     expect(freshUrl('https://example.org/a.png?x=1', 42)).toBe('https://example.org/a.png?x=1&foyer=42');
+  });
+});
+
+describe('website refresh', () => {
+  it('reloads on time although the only slide of a display starts again every slot', () => {
+    vi.useFakeTimers();
+    try {
+      const reload = vi.fn();
+      const refresh = createRefresh(reload, 120);
+      // A display with only this slide: start() at every 10 s slot boundary.
+      for (let slot = 0; slot < 30; slot++) {
+        refresh.start();
+        vi.advanceTimersByTime(10_000);
+      }
+      expect(reload).toHaveBeenCalledTimes(2);
+      refresh.stop();
+      vi.advanceTimersByTime(600_000);
+      expect(reload).toHaveBeenCalledTimes(2);
+      // Back on screen after stop(): the interval runs again.
+      refresh.start();
+      vi.advanceTimersByTime(120_000);
+      expect(reload).toHaveBeenCalledTimes(3);
+      refresh.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('never reloads with 0 seconds', () => {
+    vi.useFakeTimers();
+    try {
+      const reload = vi.fn();
+      const refresh = createRefresh(reload, 0);
+      refresh.start();
+      vi.advanceTimersByTime(3_600_000);
+      expect(reload).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

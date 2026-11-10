@@ -1,6 +1,7 @@
 import { defineRenderer } from '@foyer/slide-sdk';
 import type { WebsiteConfig } from './index.ts';
 import { freshUrl, isImageUrl } from './url.ts';
+import { createRefresh } from './refresh.ts';
 
 function imageSlide(root: HTMLElement, url: string, onError: (error: unknown) => void): () => void {
   const image = document.createElement('img');
@@ -34,18 +35,6 @@ function pageSlide(root: HTMLElement, url: string): () => void {
 
 export default defineRenderer<WebsiteConfig>((root, { config, ctx }) => {
   const reload = isImageUrl(config.url) ? imageSlide(root, config.url, ctx.reportError) : pageSlide(root, config.url);
-  let timer: ReturnType<typeof setInterval> | null = null;
-  const stop = () => {
-    if (timer !== null) clearInterval(timer);
-    timer = null;
-  };
-
-  return {
-    start() {
-      stop();
-      if (config.refresh > 0) timer = setInterval(reload, config.refresh * 1000);
-    },
-    stop,
-    destroy: stop,
-  };
+  const refresh = createRefresh(reload, config.refresh);
+  return { start: refresh.start, stop: refresh.stop, destroy: refresh.stop };
 });
