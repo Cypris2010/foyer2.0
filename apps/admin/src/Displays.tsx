@@ -159,7 +159,7 @@ function DisplayCard({ display, displays, channels, user, onEdit, onChanged, onE
     confirm(
       display.wall
         ? `Wand „${display.name}“ löschen? Ihre Displays zeigen danach wieder ihren eigenen Channel.`
-        : `Display „${display.name}“ löschen?`,
+        : `Display „${display.name}“ endgültig löschen? Das lässt sich nicht rückgängig machen: Ein neu angelegtes Display bekommt eine neue Player-Adresse, die im Gerät neu eingetragen werden muss.`,
     ) && run(() => api.del(`/displays/${display.id}`));
 
   return (
