@@ -138,3 +138,63 @@ describe('MCP', () => {
     expect(type.data.notes.join(' ')).toContain('foyer-active');
   });
 });
+
+describe('MCP-Verwaltung', () => {
+  it('legt ein Display an, ändert es, lädt es neu und löscht es nur mit dem richtigen Namen', async () => {
+    const { tool, db, channelId } = await withKey('admin');
+    const created = await tool('create_display', { name: 'W 0.00 Flur 2' });
+    expect(created.isError).toBe(false);
+    const { id, playerUrl } = created.data;
+    expect(playerUrl).toMatch(/\/p\/[^/]+$/);
+    expect((await tool('get_display_url', { id })).data.playerUrl).toBe(playerUrl);
+
+    const updated = await tool('update_display', { id, defaultChannelId: channelId, videoQuality: 'sd' });
+    expect(updated.data).toMatchObject({ name: 'W 0.00 Flur 2', defaultChannelId: channelId, videoQuality: 'sd', state: 'never', player: null });
+
+    const reload = await tool('display_command', { id, command: 'reload' });
+    expect(reload.data).toEqual({ ok: true, connected: 0 });
+
+    const wrong = await tool('delete_display', { id, confirmName: 'W 0.00 Flur 1' });
+    expect(wrong.isError).toBe(true);
+    expect(wrong.text).toContain('Nicht gelöscht');
+    expect(db.prepare('SELECT 1 FROM displays WHERE id = ?').get(id)).toBeTruthy();
+
+    const deleted = await tool('delete_display', { id, confirmName: 'W 0.00 Flur 2' });
+    expect(deleted.data.deleted.name).toBe('W 0.00 Flur 2');
+    expect(db.prepare('SELECT 1 FROM displays WHERE id = ?').get(id)).toBeUndefined();
+    expect((await tool('get_display', { id })).isError).toBe(true);
+  });
+
+  it('zeigt, was der Player zuletzt gemeldet hat', async () => {
+    const { tool, app, token } = await withKey('editor');
+    await app.request(`/api/player/${token}/heartbeat`, json('POST', { version: 'v1', slideId: 's-text', errors: ['Bild nicht geladen'], screen: '1920x1080@1' }));
+    const display = await tool('get_display', { id: 'd1' });
+    expect(display.data.state).toBe('online');
+    expect(display.data.lastSeen).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
+    expect(display.data.player).toMatchObject({ version: 'v1', screen: '1920x1080@1', errors: ['Bild nicht geladen'] });
+  });
+
+  it('lässt Displays nur von Admins anlegen und löschen', async () => {
+    const { tool, db } = await withKey('editor');
+    expect((await tool('create_display', { name: 'Neu' })).isError).toBe(true);
+    expect((await tool('get_display_url', { id: 'd1' })).isError).toBe(true);
+    const deleted = await tool('delete_display', { id: 'd1', confirmName: 'Aula' });
+    expect(deleted.isError).toBe(true);
+    expect(db.prepare("SELECT 1 FROM displays WHERE id = 'd1'").get()).toBeTruthy();
+    // Editors may still rename and reload.
+    expect((await tool('update_display', { id: 'd1', name: 'Aula Tür' })).data.name).toBe('Aula Tür');
+    expect((await tool('display_command', { id: 'd1', command: 'identify' })).isError).toBe(false);
+  });
+
+  it('legt Channels an, ändert nur die angegebenen Felder und löscht mit Namen', async () => {
+    const { tool, db } = await withKey('editor');
+    const created = await tool('create_channel', { name: 'Elternabend', defaultDuration: 20 });
+    const id = created.data.id;
+    const updated = await tool('update_channel', { id, transition: 'none' });
+    expect(updated.data).toMatchObject({ name: 'Elternabend', transition: 'none', defaultDuration: 20, published: true });
+    expect((await tool('delete_channel', { id, confirmName: 'Elternabend 2' })).isError).toBe(true);
+    expect((await tool('delete_channel', { id, confirmName: 'Elternabend' })).isError).toBe(false);
+    expect(db.prepare('SELECT 1 FROM channels WHERE id = ?').get(id)).toBeUndefined();
+    expect((await tool('update_channel', { id, name: 'x' })).isError).toBe(true);
+  });
+});

@@ -66,7 +66,9 @@ Ablauf:
 5. Planen mit create_schedule. Eine Folie läuft in einem Channel nur, solange sie dort einen Kalendereintrag hat (scope "channel"). Mit scope "display" kommt eine Folie oder ein ganzer Channel direkt auf bestimmte Displays.
 
 Zeiten sind immer Schulzeit (Wanduhr der Schule) im Format JJJJ-MM-TTTHH:MM. Schreib Folientexte auf Deutsch, kurz und aus der Entfernung lesbar. Bildnachweise für lizenzpflichtige Bilder zeigen die Displays automatisch an.
-Frag nach, bevor du Folien oder Kalendereinträge löschst oder fremde Folien änderst.`;
+6. Verwaltung: get_display (Zustand und Fehler eines Displays), display_command (neu laden), create_display / update_display / delete_display und create_channel / update_channel / delete_channel. Displays anlegen und löschen dürfen nur Admins.
+
+Frag nach, bevor du Folien, Kalendereinträge, Displays oder Channels löschst oder fremde Folien änderst. Ein gelöschtes Display lässt sich nicht wiederherstellen: Ein neues bekommt eine neue Player-Adresse.`;
 
 /** Hints per slide type that the JSON schema alone does not tell. */
 const TYPE_NOTES: Record<string, string> = {
@@ -114,6 +116,52 @@ async function previewOf(t: ToolContext, url: string | null): Promise<Content | 
   const data = Buffer.from(await res.arrayBuffer());
   if (data.length > PREVIEW_MAX_BYTES) return null;
   return { type: 'image', data: data.toString('base64'), mimeType: type.split(';')[0] };
+}
+
+/** Display as the tools show it: settings, state, and what the player reported last. */
+function displayDetails(d: any, t: ToolContext) {
+  const status = d.status ?? null;
+  return {
+    id: d.id,
+    name: d.name,
+    kind: d.kind,
+    state: d.state,
+    lastSeen: d.lastSeenAt ? utcToLocal(d.lastSeenAt, t.ctx.timeZone) : null,
+    showing: d.currentSlideTitle,
+    defaultChannelId: d.defaultChannelId,
+    orientation: d.orientation,
+    showProgress: d.showProgress,
+    soundAllowed: d.soundAllowed,
+    videoQuality: d.videoQuality,
+    networks: d.networks,
+    device: d.device ? { ip: d.device.ip, since: utcToLocal(d.device.since, t.ctx.timeZone) } : null,
+    ...(d.wall ? { wall: d.wall } : {}),
+    ...(d.wallId ? { partOfWall: d.wallId } : {}),
+    player: status
+      ? { version: status.version ?? null, slideId: status.slideId ?? null, screen: status.screen ?? null, userAgent: status.userAgent ?? null, errors: status.errors ?? [] }
+      : null,
+  };
+}
+
+async function findDisplay(t: ToolContext, id: string) {
+  const displays: any[] = await t.call('GET', '/displays');
+  const display = displays.find((d) => d.id === id);
+  if (!display) throw new ToolError(`Display ${id} nicht gefunden`);
+  return display;
+}
+
+async function findChannel(t: ToolContext, id: string) {
+  const res = await t.api('GET', `/channels/${encodeURIComponent(id)}`);
+  if (res.status === 404) throw new ToolError(`Channel ${id} nicht gefunden`);
+  if (!res.ok) throw new ToolError(`HTTP ${res.status}`);
+  return res.json() as Promise<any>;
+}
+
+/** Deleting needs the exact name as well as the id: a wrong id from a list must not delete. */
+function confirmName(kind: string, actual: string, given: string) {
+  if (given.trim() !== actual.trim()) {
+    throw new ToolError(`Nicht gelöscht: confirmName "${given}" passt nicht zum Namen des ${kind} "${actual}". Frag den Nutzer und gib den Namen genau an.`);
+  }
 }
 
 const TOOLS: Tool[] = [
@@ -447,6 +495,144 @@ end null = ohne Ende (nur ohne Wiederholung). Bei Wiederholung ist end das Ende 
     input: z.object({ scheduleId: z.string() }),
     destructive: true,
     run: ({ scheduleId }, t) => t.call('DELETE', `/schedules/${encodeURIComponent(scheduleId)}`),
+  }),
+  tool({
+    name: 'get_display',
+    title: 'Display ansehen',
+    description:
+      'Ein Display mit Einstellungen, Zustand (online/offline, zuletzt gesehen), Gerät und dem, was der Player zuletzt gemeldet hat (Version, Bildschirm, Browser und Fehler seit der vorigen Meldung, alle 30 s). Gut zur Fehlersuche, wenn ein Display hängt.',
+    input: z.object({ id: z.string() }),
+    readOnly: true,
+    run: async ({ id }, t) => displayDetails(await findDisplay(t, id), t),
+  }),
+
+  tool({
+    name: 'create_display',
+    title: 'Display anlegen',
+    description:
+      'Legt ein Display an (nur Admins). Das Ergebnis enthält die Player-Adresse: Sie kommt in den Player, z. B. in der Airtame Cloud als Website. Danach mit update_display einen Standard-Channel setzen oder mit create_schedule (scope "display") Inhalte einplanen.',
+    input: z.object({ name: z.string().min(1).max(200).describe('z. B. "A 0.00 Foyer Eingang"') }),
+    run: async ({ name }, t) => {
+      const created = await t.call('POST', '/displays', { name, kind: 'screen' });
+      return { id: created.id, name, playerUrl: `${t.origin}${created.playerPath}` };
+    },
+  }),
+
+  tool({
+    name: 'update_display',
+    title: 'Display ändern',
+    description:
+      'Ändert Einstellungen eines Displays; nur angegebene Felder ändern sich. defaultChannelId null = kein Standard-Channel. networks (nur Admins): erlaubte Netze als CIDR, eins pro Zeile, leer = alle.',
+    input: z.object({
+      id: z.string(),
+      name: z.string().min(1).max(200).optional(),
+      defaultChannelId: z.string().nullable().optional(),
+      orientation: z.enum(['landscape', 'portrait']).optional(),
+      showProgress: z.boolean().optional().describe('Fortschrittsbalken der Folie'),
+      soundAllowed: z.boolean().optional(),
+      videoQuality: z.enum(['main', 'sd']).optional().describe('main = 1080p, sd = 720p'),
+      networks: z.string().max(2000).optional(),
+    }),
+    run: async ({ id, ...changes }, t) => {
+      await t.call('PATCH', `/displays/${encodeURIComponent(id)}`, changes);
+      return displayDetails(await findDisplay(t, id), t);
+    },
+  }),
+
+  tool({
+    name: 'delete_display',
+    title: 'Display löschen',
+    description:
+      'Löscht ein Display endgültig (nur Admins); es fällt aus allen Kalendereinträgen heraus. Nicht rückgängig zu machen: Ein neues Display bekommt eine neue Player-Adresse. Vorher nachfragen; confirmName muss genau der Name des Displays sein.',
+    input: z.object({ id: z.string(), confirmName: z.string() }),
+    destructive: true,
+    run: async ({ id, confirmName: given }, t) => {
+      const display = await findDisplay(t, id);
+      confirmName('Displays', display.name, given);
+      await t.call('DELETE', `/displays/${encodeURIComponent(id)}`);
+      return { deleted: { id, name: display.name } };
+    },
+  }),
+
+  tool({
+    name: 'display_command',
+    title: 'Befehl an Display',
+    description:
+      'Schickt einem laufenden Player einen Befehl: "reload" lädt die Seite neu (hilft, wenn ein Display hängt), "identify" blendet den Namen 10 Sekunden ein. connected sagt, wie viele Player ihn empfangen haben (0 = Display nicht verbunden).',
+    input: z.object({ id: z.string(), command: z.enum(['reload', 'identify']) }),
+    run: async ({ id, command }, t) => {
+      await findDisplay(t, id);
+      const result = await t.call('POST', `/displays/${encodeURIComponent(id)}/${command}`);
+      return { ok: true, connected: result.connected };
+    },
+  }),
+
+  tool({
+    name: 'get_display_url',
+    title: 'Player-Adresse',
+    description: 'Die Player-Adresse eines Displays (nur Admins, wird protokolliert), z. B. um sie in der Airtame Cloud neu einzutragen.',
+    input: z.object({ id: z.string() }),
+    readOnly: true,
+    run: async ({ id }, t) => {
+      const { playerPath } = await t.call('POST', `/displays/${encodeURIComponent(id)}/reveal-url`);
+      return { playerUrl: `${t.origin}${playerPath}` };
+    },
+  }),
+
+  tool({
+    name: 'create_channel',
+    title: 'Channel anlegen',
+    description: 'Legt einen Channel an. Folien kommen mit create_schedule (scope "channel") hinein, auf Displays mit update_display (defaultChannelId) oder create_schedule (scope "display", contentKind "channel").',
+    input: z.object({
+      name: z.string().min(1).max(200),
+      transition: z.enum(['fade', 'slide', 'none']).default('fade'),
+      defaultDuration: z.number().int().min(1).max(3600).default(10).describe('Sekunden pro Folie ohne eigene Dauer'),
+      published: z.boolean().default(true),
+    }),
+    run: async (args, t) => {
+      const { id } = await t.call('POST', '/channels', { ...args, isFavorite: false });
+      return { id, ...args };
+    },
+  }),
+
+  tool({
+    name: 'update_channel',
+    title: 'Channel ändern',
+    description: 'Ändert Name, Übergang, Standarddauer oder Veröffentlichung eines Channels; nur angegebene Felder ändern sich.',
+    input: z.object({
+      id: z.string(),
+      name: z.string().min(1).max(200).optional(),
+      transition: z.enum(['fade', 'slide', 'none']).optional(),
+      defaultDuration: z.number().int().min(1).max(3600).optional(),
+      published: z.boolean().optional(),
+    }),
+    run: async ({ id, ...changes }, t) => {
+      const current = await findChannel(t, id);
+      const next = {
+        name: changes.name ?? current.name,
+        transition: changes.transition ?? current.transition,
+        defaultDuration: changes.defaultDuration ?? current.defaultDuration,
+        isFavorite: current.isFavorite,
+        published: changes.published ?? current.published,
+      };
+      await t.call('PUT', `/channels/${encodeURIComponent(id)}`, next);
+      return { id, ...next };
+    },
+  }),
+
+  tool({
+    name: 'delete_channel',
+    title: 'Channel löschen',
+    description:
+      'Löscht einen Channel endgültig mit seinen Kalendereinträgen; die Folien selbst bleiben. Displays mit diesem Standard-Channel zeigen danach nichts mehr davon. Vorher nachfragen; confirmName muss genau der Name des Channels sein.',
+    input: z.object({ id: z.string(), confirmName: z.string() }),
+    destructive: true,
+    run: async ({ id, confirmName: given }, t) => {
+      const channel = await findChannel(t, id);
+      confirmName('Channels', channel.name, given);
+      await t.call('DELETE', `/channels/${encodeURIComponent(id)}`);
+      return { deleted: { id, name: channel.name } };
+    },
   }),
 ];
 
