@@ -58,9 +58,28 @@ export function wallOverlay(text: string, ms?: number): boolean {
   return true;
 }
 
-/** Reloads the whole screen, shell included (new player version, admin "reload"). */
-export function reloadScreen() {
-  (inWallFrame ? window.parent : window).location.reload();
+// Server not reachable when a reload is due: ask again after this long.
+const RELOAD_RETRY_MS = 30_000;
+let reloading = false;
+
+/**
+ * Reloads the whole screen, shell included (new player version, admin "reload",
+ * the 8 h reload). Only once the server answers: a reload during a network
+ * hiccup leaves the browser on its own error page, a white screen without any
+ * script that would ever try again.
+ */
+export async function reloadScreen() {
+  if (reloading) return;
+  reloading = true;
+  const target = inWallFrame ? window.parent : window;
+  try {
+    const res = await fetch(target.location.href, { cache: 'no-store', credentials: 'same-origin' });
+    if (res.ok) return target.location.reload();
+  } catch {
+    // Offline: try again below.
+  }
+  reloading = false;
+  setTimeout(reloadScreen, RELOAD_RETRY_MS);
 }
 
 function post(message: Message) {

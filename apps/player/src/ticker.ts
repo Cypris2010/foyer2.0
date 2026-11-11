@@ -113,6 +113,8 @@ export class Ticker {
       this.pending = manifest;
       // New data (refreshSeconds) shows right away, not only at the next slide.
       for (const slide of manifest.slides) {
+        // A slide whose data failed has none to show: keep what is on screen.
+        if (slide.error) continue;
         const mounted = this.mounted.get(signature(slide));
         if (mounted?.instance.update) this.mount(slide);
       }

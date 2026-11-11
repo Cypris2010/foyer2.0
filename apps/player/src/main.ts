@@ -20,6 +20,8 @@ const BUSY_RETRY_MS = 60_000;
 const RELEASED_PAUSE_MS = 2 * 60_000;
 // Periodic full reload as memory hygiene, like wp-foyer (8 h).
 const FULL_RELOAD_MS = 8 * 3600_000;
+// Slide data (Untis) failed to load: ask again after this long.
+const DATA_RETRY_MS = 30_000;
 
 const stage = document.getElementById('stage')!;
 const progress = document.getElementById('progress')!;
@@ -130,6 +132,7 @@ if (!endpoints) {
   };
 
   let nextChangeTimer: ReturnType<typeof setTimeout> | undefined;
+  let dataRetryTimer: ReturnType<typeof setTimeout> | undefined;
   const refresh = async () => {
     if (Date.now() < pausedUntil) return;
     try {
@@ -138,8 +141,12 @@ if (!endpoints) {
       if (Date.now() < pausedUntil) return;
       // Cached as delivered: without personal data.
       storeManifest(endpoints.cacheKey, fetched);
-      const manifest = await withSlideData(fetched);
+      const { manifest, retry, stale } = await withSlideData(fetched);
       if (Date.now() < pausedUntil) return;
+      // Slide data missing (network hiccup): the slide keeps its last data; try again soon.
+      stale.forEach(recordError);
+      clearTimeout(dataRetryTimer);
+      if (retry) dataRetryTimer = setTimeout(refresh, DATA_RETRY_MS);
       const wasActive = active;
       active = true;
       hideNotice();
