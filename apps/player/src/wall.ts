@@ -60,11 +60,16 @@ export function wallOverlay(text: string, ms?: number): boolean {
 
 // Server not reachable when a reload is due: ask again after this long.
 const RELOAD_RETRY_MS = 30_000;
+// A check that hangs counts as failed.
+const RELOAD_CHECK_TIMEOUT_MS = 15_000;
+// Still here this long after reload(): the browser dropped it (seen on Airtame
+// with full graphics memory). Let the next trigger try again.
+const RELOAD_STUCK_MS = 60_000;
 let reloading = false;
 
 /**
  * Reloads the whole screen, shell included (new player version, admin "reload",
- * the 8 h reload). Only once the server answers: a reload during a network
+ * the periodic reload). Only once the server answers: a reload during a network
  * hiccup leaves the browser on its own error page, a white screen without any
  * script that would ever try again.
  */
@@ -72,11 +77,18 @@ export async function reloadScreen() {
   if (reloading) return;
   reloading = true;
   const target = inWallFrame ? window.parent : window;
+  const abort = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timeout = setTimeout(() => abort?.abort(), RELOAD_CHECK_TIMEOUT_MS);
   try {
-    const res = await fetch(target.location.href, { cache: 'no-store', credentials: 'same-origin' });
-    if (res.ok) return target.location.reload();
+    const res = await fetch(target.location.href, { cache: 'no-store', credentials: 'same-origin', signal: abort?.signal });
+    if (res.ok) {
+      setTimeout(() => (reloading = false), RELOAD_STUCK_MS);
+      return target.location.reload();
+    }
   } catch {
     // Offline: try again below.
+  } finally {
+    clearTimeout(timeout);
   }
   reloading = false;
   setTimeout(reloadScreen, RELOAD_RETRY_MS);

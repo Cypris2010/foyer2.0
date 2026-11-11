@@ -97,11 +97,6 @@ export class Ticker {
     return this.current ? Math.max(0, Math.round(this.clock() - this.startedAt)) : 0;
   }
 
-  /** Slides the display plays now. */
-  get slideCount(): number {
-    return this.slides.length;
-  }
-
   get displayName(): string {
     return this.manifest?.display.name ?? '';
   }
