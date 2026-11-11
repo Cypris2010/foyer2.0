@@ -116,6 +116,16 @@ function createTile() {
 	return tile;
 }
 
+// Text and tooltip of a tile line, changed only when they differ (no redraw otherwise).
+function setLine(node, text) {
+	if (node.textContent !== text) {
+		node.textContent = text;
+	}
+	if (node.title !== text) {
+		node.title = text;
+	}
+}
+
 function applyEntryToTile(tile, row) {
 	var clsMap = {
 		gone: 'bg-gone',
@@ -132,7 +142,10 @@ function applyEntryToTile(tile, row) {
 		finalClass = 'bg-future';
 	}
 
-	tile.className = 'foyer-teacher-dashboard__tile tile ' + finalClass;
+	var className = 'foyer-teacher-dashboard__tile tile ' + finalClass;
+	if (tile.className !== className) {
+		tile.className = className;
+	}
 
 	var ln1 = tile.querySelector('.ln1');
 	var ln2 = tile.querySelector('.ln2');
@@ -141,26 +154,21 @@ function applyEntryToTile(tile, row) {
 	var ln5 = tile.querySelector('.ln5');
 
 	if (ln1) {
-		ln1.textContent = normalize(row[0]);
-		ln1.title = normalize(row[0]);
+		setLine(ln1, normalize(row[0]));
 	}
 	if (ln2) {
 		const t1 = toHHMM(row[1]);
 		const t2 = toHHMM(row[2]);
-		ln2.textContent = t1 && t2 ? t1 + ' – ' + t2 : (t1 || t2 || '');
-		ln2.title = ln2.textContent;
+		setLine(ln2, t1 && t2 ? t1 + ' – ' + t2 : (t1 || t2 || ''));
 	}
 	if (ln3) {
-		ln3.textContent = normalize(row[3]);
-		ln3.title = normalize(row[3]);
+		setLine(ln3, normalize(row[3]));
 	}
 	if (ln4) {
-		ln4.textContent = normalize(row[5]);
-		ln4.title = normalize(row[5]);
+		setLine(ln4, normalize(row[5]));
 	}
 	if (ln5) {
-		ln5.textContent = normalize(row[6]);
-		ln5.title = normalize(row[6]);
+		setLine(ln5, normalize(row[6]));
 	}
 }
 
@@ -263,6 +271,7 @@ function initInstance(wrapper, payload) {
 	let rotateTimer = null;
 	let refreshTimer = null;
 	let lastRows = [];
+	let lastViewKey = null;
 	let stateGroups = [];
 	let activeStatus = new Set();
 
@@ -367,7 +376,7 @@ function initInstance(wrapper, payload) {
 	}
 
 	function hideError() {
-		if (errorContainer) {
+		if (errorContainer && !errorContainer.hidden) {
 			errorContainer.hidden = true;
 		}
 	}
@@ -376,6 +385,13 @@ function initInstance(wrapper, payload) {
 		lastRows = rows;
 
 		var baseRows = rows.filter(passesTeacherFilter);
+		// Same picture as last time (the 30 s timer, unchanged data): leave the page
+		// alone. Every redraw costs graphics memory on Airtame that is not given back.
+		var viewKey = JSON.stringify([baseRows, baseRows.map(isFarFuture), Array.from(activeStatus)]);
+		if (viewKey === lastViewKey) {
+			return;
+		}
+		lastViewKey = viewKey;
 		var counts = {};
 		STATUS_KEYS.forEach(function(key){ counts[key] = 0; });
 		baseRows.forEach(function(r){

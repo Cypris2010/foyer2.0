@@ -13,6 +13,13 @@ const CATCH_UP_MIN_S = 1;
 // The next slide loads once the old one is gone: weak devices stutter when a
 // video starts while another one loads. Not later, it needs the time to buffer.
 const PREPARE_NEXT_MS = TRANSITION_MS;
+// keepAlive slides (Untis) on screen are rebuilt at every full five minutes of
+// the clock (:00, :05, :10 …), crossfaded like a slide change. Airtame's browser
+// does not free the graphics memory of a page area drawn over and over (Untis
+// slides redraw every 30-60 s); a fresh element frees it like any slide change.
+const RENEW_MS = 5 * 60_000;
+// Built this recently (slide just started): no need to rebuild it yet.
+const RENEW_MIN_AGE_MS = 60_000;
 
 interface Mounted {
   key: string;
@@ -22,6 +29,8 @@ interface Mounted {
   el: HTMLElement;
   instance: SlideInstance;
   background: BackgroundControl;
+  /** Date.now() when the instance was built. */
+  since: number;
 }
 
 function hash(text: string): number {
@@ -52,6 +61,7 @@ export class Ticker {
   private mounted = new Map<string, Mounted>();
   private timer: ReturnType<typeof setTimeout> | undefined;
   private prepareTimer: ReturnType<typeof setTimeout> | undefined;
+  private renewTimer: ReturnType<typeof setTimeout> | undefined;
   /** Clock time the current slide began, and the slot it fills on the timeline. */
   private startedAt = 0;
   private slot: Slot | null = null;
@@ -71,6 +81,7 @@ export class Ticker {
     this.progress = progress;
     this.hooks = hooks;
     this.clock = clock;
+    this.scheduleRenew();
   }
 
   get version(): string | null {
@@ -84,6 +95,11 @@ export class Ticker {
   /** How long the current slide has been on screen. */
   get elapsedMs(): number {
     return this.current ? Math.max(0, Math.round(this.clock() - this.startedAt)) : 0;
+  }
+
+  /** Slides the display plays now. */
+  get slideCount(): number {
+    return this.slides.length;
   }
 
   get displayName(): string {
@@ -286,6 +302,39 @@ export class Ticker {
     return true;
   }
 
+  private scheduleRenew() {
+    clearTimeout(this.renewTimer);
+    const now = this.clock();
+    this.renewTimer = setTimeout(this.renew, (Math.floor(now / RENEW_MS) + 1) * RENEW_MS - now + 50);
+  }
+
+  /**
+   * Swaps the slide on screen for a fresh copy of itself (keepAlive types only:
+   * videos, live pictures and web pages would restart). Slot and progress stay.
+   */
+  private renew = () => {
+    this.scheduleRenew();
+    const old = this.current;
+    if (!old || !old.slide.keepAlive || Date.now() - old.since < RENEW_MIN_AGE_MS) return;
+    this.mounted.delete(old.key);
+    const fresh = this.mount(old.slide);
+    if (!fresh) {
+      this.mounted.set(old.key, old);
+      return;
+    }
+    fresh.el.classList.add('is-active');
+    fresh.background.start();
+    fresh.instance.start?.();
+    this.current = fresh;
+    old.el.classList.remove('is-active');
+    old.el.classList.add('is-leaving');
+    setTimeout(() => {
+      old.instance.stop?.();
+      old.background.stop();
+      this.unmount(old);
+    }, TRANSITION_MS);
+  };
+
   private prepareNext = () => {
     if (!this.current) return;
     const next = this.slides[(this.index + 1) % this.slides.length];
@@ -347,7 +396,7 @@ export class Ticker {
         credit.textContent = slide.credits.join('  |  ');
         el.appendChild(credit);
       }
-      const mounted = { key, data: dataHash(slide), slide, el, instance, background };
+      const mounted = { key, data: dataHash(slide), slide, el, instance, background, since: Date.now() };
       this.mounted.set(key, mounted);
       return mounted;
     } catch (err) {
@@ -379,7 +428,7 @@ export class Ticker {
     }
     mounted.background.destroy();
     mounted.el.remove();
-    this.mounted.delete(mounted.key);
+    if (this.mounted.get(mounted.key) === mounted) this.mounted.delete(mounted.key);
   }
 
   private idle() {

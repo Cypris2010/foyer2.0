@@ -20,6 +20,10 @@ const BUSY_RETRY_MS = 60_000;
 const RELEASED_PAUSE_MS = 2 * 60_000;
 // Periodic full reload as memory hygiene, like wp-foyer (8 h).
 const FULL_RELOAD_MS = 8 * 3600_000;
+// A display with a single slide (Untis) never changes slides, which is what frees
+// graphics memory on Airtame: reload it more often, as a safety net next to the
+// ticker's five-minute rebuild.
+const SINGLE_SLIDE_RELOAD_MS = 2 * 3600_000;
 // Slide data (Untis) failed to load: ask again after this long.
 const DATA_RETRY_MS = 30_000;
 
@@ -81,6 +85,7 @@ if (!endpoints) {
     onSlideChange: () => {
       // New Foyer version on the server: reload between slides, never mid-slide.
       if (update.due) return reloadScreen();
+      if (endpoints.mode === 'display' && ticker.slideCount === 1 && Date.now() - pageStart >= SINGLE_SLIDE_RELOAD_MS) return reloadScreen();
       reportNowPlaying();
     },
   }, now);

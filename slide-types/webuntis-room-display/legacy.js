@@ -382,11 +382,11 @@ function updateTimestamp(node, labels, locale, timezone, timestamp) {
 	}
 	var formattedTime = formatTime(timestamp, locale, timezone);
 	if (labels.updated && labels.updated.indexOf('%s') !== -1) {
-		updatedNode.textContent = labels.updated.replace('%s', formattedTime);
+		setText(updatedNode, labels.updated.replace('%s', formattedTime));
 	} else if (labels.updated) {
-		updatedNode.textContent = labels.updated + ' ' + formattedTime;
+		setText(updatedNode, labels.updated + ' ' + formattedTime);
 	} else {
-		updatedNode.textContent = formattedTime;
+		setText(updatedNode, formattedTime);
 	}
 }
 
@@ -443,16 +443,16 @@ function startClock(node, state) {
 	function applyFormats(now) {
 		if (dateNode) {
 			if (formatDateAttr) {
-				dateNode.textContent = formatCustom(now, formatDateAttr, state.timezone);
+				setText(dateNode, formatCustom(now, formatDateAttr, state.timezone));
 			} else {
-				dateNode.textContent = formatDate(now, state.locale, state.timezone);
+				setText(dateNode, formatDate(now, state.locale, state.timezone));
 			}
 		}
 		if (timeNode) {
 			if (formatTimeAttr) {
-				timeNode.textContent = formatCustom(now, formatTimeAttr, state.timezone);
+				setText(timeNode, formatCustom(now, formatTimeAttr, state.timezone));
 			} else {
-				timeNode.textContent = formatClockTime(now, state.locale, state.timezone);
+				setText(timeNode, formatClockTime(now, state.locale, state.timezone));
 			}
 		}
 	}
@@ -534,22 +534,42 @@ function render(node, rooms, state) {
 		return;
 	}
 
-	clearChildren(grid);
-
+	// Built aside and swapped in only when it differs: every redraw of the whole
+	// page costs graphics memory on Airtame that is not given back (ticker.ts).
+	var next = document.createElement('div');
 	if (!rooms.length) {
 		var placeholder = document.createElement('div');
 		placeholder.className = 'foyer-webuntis-room-display__placeholder';
 		placeholder.textContent = state.labels.noRooms;
-		grid.appendChild(placeholder);
+		next.appendChild(placeholder);
+	} else {
+		renderTiles(next, rooms, state.labels, {
+			formatRange: function (start, end) {
+				return formatTimeRange(start, end, state.locale, state.timezone);
+			},
+			isGenericType: isGenericLessonType
+		}, state.rooms.length, state.hideUpcoming);
+	}
+	var nextStyle = next.getAttribute('style') || '';
+	if (next.innerHTML === grid.innerHTML && nextStyle === (grid.getAttribute('style') || '')) {
 		return;
 	}
+	if (nextStyle) {
+		grid.setAttribute('style', nextStyle);
+	} else {
+		grid.removeAttribute('style');
+	}
+	clearChildren(grid);
+	while (next.firstChild) {
+		grid.appendChild(next.firstChild);
+	}
+}
 
-	renderTiles(grid, rooms, state.labels, {
-		formatRange: function (start, end) {
-			return formatTimeRange(start, end, state.locale, state.timezone);
-		},
-		isGenericType: isGenericLessonType
-	}, state.rooms.length, state.hideUpcoming);
+// Changing text only when it differs keeps the browser from redrawing it.
+function setText(node, text) {
+	if (node.textContent !== text) {
+		node.textContent = text;
+	}
 }
 
 // Show an inline error message inside the widget.
@@ -568,8 +588,10 @@ function clearError(node) {
 	if (!errorBox) {
 		return;
 	}
-	errorBox.hidden = true;
-	errorBox.textContent = '';
+	if (!errorBox.hidden) {
+		errorBox.hidden = true;
+	}
+	setText(errorBox, '');
 }
 
 // Cancel timers when an instance is torn down.
